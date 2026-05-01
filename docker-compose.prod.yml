@@ -1,0 +1,76 @@
+services:
+  django:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120
+    env_file:
+      - ./backend/.env.prod
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.prod
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - femvelle
+    restart: unless-stopped
+
+  celery:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A config worker --loglevel=warning --concurrency 4
+    env_file:
+      - ./backend/.env.prod
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.prod
+    depends_on:
+      - django
+      - redis
+    networks:
+      - femvelle
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.4
+    env_file:
+      - ./backend/.env.prod
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - femvelle
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    networks:
+      - femvelle
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: prod
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - django
+    networks:
+      - femvelle
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+
+networks:
+  femvelle:
+    driver: bridge
