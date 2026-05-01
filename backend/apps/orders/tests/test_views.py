@@ -180,3 +180,43 @@ def test_checkout_deduplicates_cart_items(auth_client, product):
     assert Decimal(data["total_price"]) == Decimal("600.00")
     product.refresh_from_db()
     assert product.stock == 5
+
+
+# ---------------------------------------------------------------------------
+# Idempotency — API level
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_duplicate_request_returns_200_not_201(auth_client, product):
+    payload = {
+        "idempotency_key": "client-uuid-aabbcc",
+        "items": [{"product_id": product.pk, "quantity": 1}],
+        "shipping_address": "123 Main St, Riyadh, Saudi Arabia",
+    }
+
+    res1 = auth_client.post(CHECKOUT_URL, payload, format="json")
+    assert res1.status_code == 201
+
+    res2 = auth_client.post(CHECKOUT_URL, payload, format="json")
+    assert res2.status_code == 200  # duplicate — existing order returned
+
+    # Same order id in both responses
+    assert res1.json()["id"] == res2.json()["id"]
+    assert Order.objects.count() == 1
+
+    # Stock deducted only once
+    product.refresh_from_db()
+    assert product.stock == 9
+
+
+@pytest.mark.django_db
+def test_idempotency_key_in_response(auth_client, product):
+    key = "my-unique-key-123"
+    res = auth_client.post(CHECKOUT_URL, {
+        "idempotency_key": key,
+        "items": [{"product_id": product.pk, "quantity": 1}],
+        "shipping_address": "123 Main St, Riyadh, Saudi Arabia",
+    }, format="json")
+
+    assert res.status_code == 201
+    assert res.json()["idempotency_key"] == key

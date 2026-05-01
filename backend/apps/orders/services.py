@@ -1,7 +1,7 @@
 from decimal import Decimal
 from typing import List
 
-from django.db import transaction
+from django.db import transaction, IntegrityError
 
 from apps.products.models import Product
 from .exceptions import (
@@ -34,9 +34,14 @@ def create_order_from_cart(
     cart_items: List[CartItem],
     shipping_address: str,
     notes: str = "",
-) -> Order:
+    idempotency_key: str = "",
+) -> tuple[Order, bool]:
     """
     Create an Order atomically from a list of CartItems.
+
+    Returns:
+        (order, created) — created=False means a duplicate request was detected
+        and the existing order was returned without touching stock.
 
     Guarantees:
     - All stock is validated before any write occurs.
@@ -45,6 +50,8 @@ def create_order_from_cart(
     - If anything fails the entire transaction rolls back — no partial orders.
     - Price is snapshotted at the moment of purchase (sale_price takes
       priority over price).
+    - If idempotency_key is provided and an order already exists for this
+      user+key, the existing order is returned immediately — no stock touched.
 
     Raises:
         EmptyCartError            – cart_items is empty
@@ -54,6 +61,21 @@ def create_order_from_cart(
     """
     if not cart_items:
         raise EmptyCartError()
+
+    # ------------------------------------------------------------------
+    # Idempotency check — outside the transaction on purpose.
+    # A simple read before acquiring any locks. If the key exists we
+    # return immediately — zero writes, zero lock contention.
+    # ------------------------------------------------------------------
+    if idempotency_key:
+        try:
+            existing = (
+                Order.objects.prefetch_related("items__product")
+                .get(user=user, idempotency_key=idempotency_key)
+            )
+            return existing, False
+        except Order.DoesNotExist:
+            pass
 
     with transaction.atomic():
         # ------------------------------------------------------------------
@@ -79,46 +101,61 @@ def create_order_from_cart(
         _validate_cart(cart_items, product_map)
 
         # ------------------------------------------------------------------
-        # 3. Compute total and deduct stock.
+        # 3 + 4. Deduct stock and persist Order + OrderItems inside a single
+        #        savepoint. If a concurrent request already committed an order
+        #        with the same idempotency_key, the IntegrityError rolls back
+        #        this savepoint — including the stock deduction — cleanly.
+        #        The outer transaction remains alive for the recovery query.
         # ------------------------------------------------------------------
-        total = Decimal("0.00")
-        for item in cart_items:
-            product = product_map[item.product_id]
-            unit_price = product.sale_price if product.sale_price else product.price
-            total += unit_price * item.quantity
-            product.stock -= item.quantity
+        try:
+            with transaction.atomic():
+                total = Decimal("0.00")
+                for item in cart_items:
+                    product = product_map[item.product_id]
+                    unit_price = product.sale_price if product.sale_price else product.price
+                    total += unit_price * item.quantity
+                    product.stock -= item.quantity
 
-        # Bulk-update stock in one query — efficient and still inside the lock
-        Product.objects.bulk_update(list(product_map.values()), ["stock"])
+                Product.objects.bulk_update(list(product_map.values()), ["stock"])
 
-        # ------------------------------------------------------------------
-        # 4. Persist Order + OrderItems.
-        # ------------------------------------------------------------------
-        order = Order.objects.create(
-            user=user,
-            status=Order.Status.PENDING,
-            total_price=total,
-            shipping_address=shipping_address,
-            notes=notes,
-        )
-
-        order_items = []
-        for item in cart_items:
-            product = product_map[item.product_id]
-            unit_price = product.sale_price if product.sale_price else product.price
-            order_items.append(
-                OrderItem(
-                    order=order,
-                    product=product,
-                    quantity=item.quantity,
-                    unit_price=unit_price,
+                order = Order.objects.create(
+                    user=user,
+                    status=Order.Status.PENDING,
+                    total_price=total,
+                    shipping_address=shipping_address,
+                    notes=notes,
+                    idempotency_key=idempotency_key,
                 )
-            )
 
-        OrderItem.objects.bulk_create(order_items)
+                order_items = []
+                for item in cart_items:
+                    product = product_map[item.product_id]
+                    unit_price = product.sale_price if product.sale_price else product.price
+                    order_items.append(
+                        OrderItem(
+                            order=order,
+                            product=product,
+                            quantity=item.quantity,
+                            unit_price=unit_price,
+                        )
+                    )
+
+                OrderItem.objects.bulk_create(order_items)
+
+        except IntegrityError:
+            # Concurrent request won the race. Savepoint rolled back —
+            # stock deduction included. Fetch and return the winner's order.
+            if not idempotency_key:
+                raise  # genuine integrity error unrelated to idempotency
+
+            existing = (
+                Order.objects.prefetch_related("items__product")
+                .get(user=user, idempotency_key=idempotency_key)
+            )
+            return existing, False
 
     # Return the fully populated order outside the lock
-    return Order.objects.prefetch_related("items__product").get(pk=order.pk)
+    return Order.objects.prefetch_related("items__product").get(pk=order.pk), True
 
 
 # ---------------------------------------------------------------------------

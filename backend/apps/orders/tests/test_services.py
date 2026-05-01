@@ -85,11 +85,12 @@ def inactive_product(db, category):
 
 @pytest.mark.django_db
 def test_create_order_success(user, product):
-    order = create_order_from_cart(
+    order, created = create_order_from_cart(
         user=user,
         cart_items=[CartItem(product_id=product.pk, quantity=2)],
         shipping_address="123 Main St, Riyadh, Saudi Arabia",
     )
+    assert created is True
 
     assert order.pk is not None
     assert order.status == Order.Status.PENDING
@@ -109,11 +110,12 @@ def test_create_order_success(user, product):
 
 @pytest.mark.django_db
 def test_create_order_uses_sale_price(user, product_on_sale):
-    order = create_order_from_cart(
+    order, created = create_order_from_cart(
         user=user,
         cart_items=[CartItem(product_id=product_on_sale.pk, quantity=1)],
         shipping_address="123 Main St, Riyadh, Saudi Arabia",
     )
+    assert created is True
 
     assert order.total_price == Decimal("75.00")
     item = order.items.first()
@@ -122,7 +124,7 @@ def test_create_order_uses_sale_price(user, product_on_sale):
 
 @pytest.mark.django_db
 def test_create_order_multiple_items(user, product, product_on_sale):
-    order = create_order_from_cart(
+    order, created = create_order_from_cart(
         user=user,
         cart_items=[
             CartItem(product_id=product.pk, quantity=1),
@@ -130,6 +132,7 @@ def test_create_order_multiple_items(user, product, product_on_sale):
         ],
         shipping_address="123 Main St, Riyadh, Saudi Arabia",
     )
+    assert created is True
 
     # 120.00 + (75.00 * 2) = 270.00
     assert order.total_price == Decimal("270.00")
@@ -239,3 +242,135 @@ def test_no_partial_order_on_invalid_product(user, product):
     assert Order.objects.count() == 0
     product.refresh_from_db()
     assert product.stock == stock_before
+
+
+# ---------------------------------------------------------------------------
+# Idempotency
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_duplicate_key_returns_existing_order(user, product):
+    key = "frontend-uuid-abc123"
+
+    order1, created1 = create_order_from_cart(
+        user=user,
+        cart_items=[CartItem(product_id=product.pk, quantity=1)],
+        shipping_address="123 Main St, Riyadh",
+        idempotency_key=key,
+    )
+    assert created1 is True
+    assert Order.objects.count() == 1
+
+    # Simulate frontend retry with same key
+    order2, created2 = create_order_from_cart(
+        user=user,
+        cart_items=[CartItem(product_id=product.pk, quantity=1)],
+        shipping_address="123 Main St, Riyadh",
+        idempotency_key=key,
+    )
+    assert created2 is False
+    assert order1.pk == order2.pk
+    assert Order.objects.count() == 1  # still only one order
+
+    # Stock must only have been deducted once
+    product.refresh_from_db()
+    assert product.stock == 9
+
+
+@pytest.mark.django_db
+def test_same_key_different_users_creates_separate_orders(user, product, category):
+    other_user = get_user_model().objects.create_user(
+        username="other", email="other@femvelle.com", password="pass1234"
+    )
+    key = "shared-key-xyz"
+
+    order1, created1 = create_order_from_cart(
+        user=user,
+        cart_items=[CartItem(product_id=product.pk, quantity=1)],
+        shipping_address="123 Main St, Riyadh",
+        idempotency_key=key,
+    )
+    order2, created2 = create_order_from_cart(
+        user=other_user,
+        cart_items=[CartItem(product_id=product.pk, quantity=1)],
+        shipping_address="456 Other St, Riyadh",
+        idempotency_key=key,
+    )
+
+    assert created1 is True
+    assert created2 is True
+    assert order1.pk != order2.pk
+    assert Order.objects.count() == 2
+
+    product.refresh_from_db()
+    assert product.stock == 8  # deducted twice, correctly
+
+
+@pytest.mark.django_db
+def test_no_key_always_creates_new_order(user, product):
+    order1, _ = create_order_from_cart(
+        user=user,
+        cart_items=[CartItem(product_id=product.pk, quantity=1)],
+        shipping_address="123 Main St, Riyadh",
+    )
+    order2, _ = create_order_from_cart(
+        user=user,
+        cart_items=[CartItem(product_id=product.pk, quantity=1)],
+        shipping_address="123 Main St, Riyadh",
+    )
+    assert order1.pk != order2.pk
+    assert Order.objects.count() == 2
+
+
+# ---------------------------------------------------------------------------
+# Race condition — simulate two concurrent requests with same idempotency key
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db(transaction=True)
+def test_integrity_error_on_race_returns_existing_order(user, product):
+    """
+    Simulate the race window: both requests pass the pre-check (DoesNotExist),
+    both enter the transaction, one wins the INSERT, the other hits IntegrityError.
+    The loser must recover and return the winner's order, not raise.
+    """
+    from django.db import IntegrityError
+    from unittest.mock import patch
+
+    key = "race-condition-key-001"
+
+    # First request creates the order normally
+    order1, created1 = create_order_from_cart(
+        user=user,
+        cart_items=[CartItem(product_id=product.pk, quantity=1)],
+        shipping_address="123 Main St, Riyadh",
+        idempotency_key=key,
+    )
+    assert created1 is True
+
+    # Simulate the losing concurrent request: pre-check is bypassed (already
+    # passed in the real race), goes straight to the INSERT which raises
+    # IntegrityError because the winner already committed.
+    original_get = Order.objects.get
+
+    call_count = 0
+
+    def patched_get(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        # First call is the pre-check inside create_order_from_cart —
+        # make it raise DoesNotExist to simulate the race window.
+        if call_count == 1 and kwargs.get("idempotency_key") == key:
+            raise Order.DoesNotExist
+        return original_get(*args, **kwargs)
+
+    with patch.object(Order.objects, "get", side_effect=patched_get):
+        order2, created2 = create_order_from_cart(
+            user=user,
+            cart_items=[CartItem(product_id=product.pk, quantity=1)],
+            shipping_address="123 Main St, Riyadh",
+            idempotency_key=key,
+        )
+
+    assert created2 is False
+    assert order1.pk == order2.pk
+    assert Order.objects.count() == 1

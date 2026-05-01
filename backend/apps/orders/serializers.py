@@ -22,6 +22,9 @@ class CartItemInputSerializer(serializers.Serializer):
 
 
 class CreateOrderSerializer(serializers.Serializer):
+    idempotency_key = serializers.CharField(
+        required=False, allow_blank=True, default="", max_length=64
+    )
     items = CartItemInputSerializer(many=True, min_length=1)
     shipping_address = serializers.CharField(min_length=10, max_length=500)
     notes = serializers.CharField(required=False, allow_blank=True, default="", max_length=1000)
@@ -59,6 +62,7 @@ class OrderOutputSerializer(serializers.ModelSerializer):
             "total_price",
             "shipping_address",
             "notes",
+            "idempotency_key",
             "items",
             "created_at",
         )

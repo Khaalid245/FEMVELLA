@@ -53,14 +53,13 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         ]
 
         # All business logic + DB writes happen here — view stays thin
-        order = create_order_from_cart(
+        order, created = create_order_from_cart(
             user=request.user,
             cart_items=cart_items,
             shipping_address=validated["shipping_address"],
             notes=validated.get("notes", ""),
+            idempotency_key=validated.get("idempotency_key", ""),
         )
 
-        return Response(
-            OrderOutputSerializer(order).data,
-            status=status.HTTP_201_CREATED,
-        )
+        http_status = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        return Response(OrderOutputSerializer(order).data, status=http_status)

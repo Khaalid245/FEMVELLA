@@ -17,6 +17,16 @@ class Order(TimeStampedModel):
     total_price = models.DecimalField(max_digits=10, decimal_places=2)
     shipping_address = models.TextField()
     notes = models.TextField(blank=True)
+    idempotency_key = models.CharField(max_length=64, blank=True, default="")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "idempotency_key"],
+                condition=models.Q(idempotency_key__gt=""),
+                name="unique_order_idempotency_key_per_user",
+            )
+        ]
 
     def __str__(self):
         return f"Order #{self.pk} - {self.user.email}"
