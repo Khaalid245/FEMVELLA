@@ -15,8 +15,14 @@ class Payment(TimeStampedModel):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
-    provider = models.CharField(max_length=50)
-    provider_transaction_id = models.CharField(max_length=255, blank=True)
+    provider = models.CharField(max_length=50, default="stripe")
+    # Stripe PaymentIntent id — pi_xxxx. Unique per payment, blank until created.
+    stripe_payment_intent_id = models.CharField(max_length=255, unique=True, blank=True, default="")
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["stripe_payment_intent_id"]),
+        ]
 
     def __str__(self):
         return f"Payment {self.pk} - {self.status}"

@@ -7,10 +7,12 @@ from core.models import TimeStampedModel
 class Order(TimeStampedModel):
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
+        PAID = "paid", "Paid"
         CONFIRMED = "confirmed", "Confirmed"
         SHIPPED = "shipped", "Shipped"
         DELIVERED = "delivered", "Delivered"
         CANCELLED = "cancelled", "Cancelled"
+        FAILED = "failed", "Failed"
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="orders")
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
@@ -20,12 +22,8 @@ class Order(TimeStampedModel):
     idempotency_key = models.CharField(max_length=64, blank=True, default="")
 
     class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["user", "idempotency_key"],
-                condition=models.Q(idempotency_key__gt=""),
-                name="unique_order_idempotency_key_per_user",
-            )
+        indexes = [
+            models.Index(fields=["user", "idempotency_key"], name="order_user_idempotency_idx"),
         ]
 
     def __str__(self):

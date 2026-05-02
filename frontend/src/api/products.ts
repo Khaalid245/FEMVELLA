@@ -1,6 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import api from "./client";
 
+export interface ProductColor {
+  id: number;
+  name: string;
+  hex_code: string;
+}
+
+export interface ProductSize {
+  id: number;
+  size: string;
+  in_stock: boolean;
+}
+
 export interface Product {
   id: number;
   name: string;
@@ -8,16 +20,29 @@ export interface Product {
   description: string;
   price: string;
   sale_price: string | null;
+  discount_percent: number | null;
   stock: number;
   is_featured: boolean;
+  is_new: boolean;
+  is_bestseller: boolean;
   images: { id: number; image: string; is_primary: boolean }[];
+  colors: ProductColor[];
+  sizes: ProductSize[];
   category: { id: number; name: string; slug: string };
+  created_at: string;
+}
+
+export interface ProductsResponse {
+  count: number;
+  results: Product[];
 }
 
 export const useProducts = (params?: Record<string, string>) =>
   useQuery({
     queryKey: ["products", params],
-    queryFn: () => api.get<{ results: Product[] }>("/products/", { params }).then((r) => r.data),
+    queryFn: () =>
+      api.get<ProductsResponse>("/products/", { params }).then((r) => r.data),
+    staleTime: 1000 * 60 * 5,
   });
 
 export const useProduct = (slug: string) =>
@@ -26,3 +51,16 @@ export const useProduct = (slug: string) =>
     queryFn: () => api.get<Product>(`/products/${slug}/`).then((r) => r.data),
     enabled: !!slug,
   });
+
+// Tab-specific hooks — each has its own stable query key for independent caching
+export const useNewArrivals = () =>
+  useProducts({ ordering: "-created_at" });
+
+export const useBestsellers = () =>
+  useProducts({ is_bestseller: "true", ordering: "-created_at" });
+
+export const useOnSale = () =>
+  useProducts({ on_sale: "true" });
+
+export const useFeatured = () =>
+  useProducts({ is_featured: "true" });

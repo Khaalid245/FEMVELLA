@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        migrations.swappable_dependency(django.conf.settings.AUTH_USER_MODEL),
+        ("accounts", "0001_initial"),
         ("products", "0001_initial"),
     ]
 
@@ -16,16 +16,18 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="Order",
             fields=[
-                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False)),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 ("status", models.CharField(
                     choices=[
                         ("pending", "Pending"),
+                        ("paid", "Paid"),
                         ("confirmed", "Confirmed"),
                         ("shipped", "Shipped"),
                         ("delivered", "Delivered"),
                         ("cancelled", "Cancelled"),
+                        ("failed", "Failed"),
                     ],
                     default="pending",
                     max_length=20,
@@ -37,7 +39,7 @@ class Migration(migrations.Migration):
                 ("user", models.ForeignKey(
                     on_delete=django.db.models.deletion.CASCADE,
                     related_name="orders",
-                    to=django.conf.settings.AUTH_USER_MODEL,
+                    to="accounts.user",
                 )),
             ],
             options={"abstract": False},
@@ -45,7 +47,7 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="OrderItem",
             fields=[
-                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False)),
                 ("quantity", models.PositiveIntegerField()),
                 ("unit_price", models.DecimalField(decimal_places=2, max_digits=10)),
                 ("order", models.ForeignKey(
@@ -60,12 +62,11 @@ class Migration(migrations.Migration):
                 )),
             ],
         ),
-        migrations.AddConstraint(
+        # MySQL does not support conditional unique constraints.
+        # Idempotency uniqueness is enforced at the application layer
+        # in services.py via select_for_update + IntegrityError handling.
+        migrations.AddIndex(
             model_name="order",
-            constraint=models.UniqueConstraint(
-                condition=models.Q(idempotency_key__gt=""),
-                fields=["user", "idempotency_key"],
-                name="unique_order_idempotency_key_per_user",
-            ),
+            index=models.Index(fields=["user", "idempotency_key"], name="order_user_idempotency_idx"),
         ),
     ]

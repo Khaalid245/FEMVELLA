@@ -1,8 +1,10 @@
+import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import Button from "@/components/Button";
 import { useCartStore } from "@/store/cartStore";
 
 export default function CartPage() {
+  const navigate = useNavigate();
   const { items, removeItem, updateQuantity, total, clearCart } = useCartStore();
 
   if (items.length === 0) {
@@ -48,7 +50,7 @@ export default function CartPage() {
           <div className="border-t pt-4 flex justify-between font-semibold text-gray-900 mb-6">
             <span>Total</span><span>${total().toFixed(2)}</span>
           </div>
-          <Button size="lg" className="w-full">Proceed to Checkout</Button>
+          <Button size="lg" className="w-full" onClick={() => navigate("/checkout")}>Proceed to Checkout</Button>
           <button onClick={clearCart} className="w-full mt-3 text-sm text-gray-400 hover:text-red-400">Clear Cart</button>
         </div>
       </div>
