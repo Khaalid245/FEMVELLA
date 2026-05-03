@@ -1,4 +1,4 @@
-from rest_framework import viewsets, filters
+from rest_framework import viewsets, filters, generics
 from django_filters.rest_framework import DjangoFilterBackend
 from core.permissions import IsAdminOrReadOnly
 from .filters import ProductFilter
@@ -16,16 +16,22 @@ class CategoryViewSet(viewsets.ModelViewSet):
 class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
     permission_classes = (IsAdminOrReadOnly,)
-    lookup_field = "slug"
     filter_backends = (DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter)
     filterset_class = ProductFilter
     search_fields = ("name", "description")
     ordering_fields = ("price", "created_at")
     ordering = ("-created_at",)
 
+    def get_object(self):
+        """Support lookup by both pk (integer) and slug (string)."""
+        lookup = self.kwargs.get(self.lookup_field)
+        qs = self.get_queryset()
+        if lookup and lookup.isdigit():
+            return generics.get_object_or_404(qs, pk=lookup)
+        return generics.get_object_or_404(qs, slug=lookup)
+
     def get_queryset(self):
         qs = Product.objects.select_related("category").prefetch_related("images", "colors", "sizes")
-        # Admin sees all products including inactive
         if self.request.user.is_staff:
             return qs.all()
         return qs.filter(is_active=True)

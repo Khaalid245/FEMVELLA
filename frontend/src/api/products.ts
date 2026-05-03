@@ -1,15 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import api from "./client";
 
-export interface ProductColor {
-  id: number;
-  name: string;
-  hex_code: string;
-}
-
-export interface ProductSize {
+export interface ProductVariant {
   id: number;
   size: string;
+  color: string;
+  stock: number;
+  price_override: string | null;
+  effective_price: string;
   in_stock: boolean;
 }
 
@@ -22,12 +20,14 @@ export interface Product {
   sale_price: string | null;
   discount_percent: number | null;
   stock: number;
+  total_stock: number;
   is_featured: boolean;
   is_new: boolean;
   is_bestseller: boolean;
   images: { id: number; image: string; is_primary: boolean }[];
-  colors: ProductColor[];
-  sizes: ProductSize[];
+  colors: { id: number; name: string; hex_code: string }[];
+  sizes: { id: number; size: string; in_stock: boolean }[];
+  variants: ProductVariant[];
   category: { id: number; name: string; slug: string };
   created_at: string;
 }

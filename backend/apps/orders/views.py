@@ -51,7 +51,11 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         serializer.is_valid(raise_exception=True)
         v = serializer.validated_data
         cart_items = [
-            CartItem(product_id=i["product_id"], quantity=i["quantity"])
+            CartItem(
+                product_id=i["product_id"],
+                quantity=i["quantity"],
+                variant_id=i.get("variant_id"),
+            )
             for i in v["items"]
         ]
         order, created = create_order_from_cart(

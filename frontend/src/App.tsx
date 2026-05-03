@@ -7,6 +7,7 @@ import AdminLayout from "@/admin/AdminLayout";
 import AdminOverviewPage from "@/admin/AdminOverviewPage";
 import AdminOrdersPage from "@/admin/AdminOrdersPage";
 import AdminProductsPage from "@/admin/AdminProductsPage";
+import AdminEditProductPage from "@/admin/AdminEditProductPage";
 import HomePage from "@/pages/HomePage";
 import ShopPage from "@/pages/ShopPage";
 import ProductDetailPage from "@/pages/ProductDetailPage";
@@ -53,6 +54,7 @@ export default function App() {
         <Route path="/admin" element={<AdminRoute><AdminLayout><AdminOverviewPage /></AdminLayout></AdminRoute>} />
         <Route path="/admin/orders" element={<AdminRoute><AdminLayout><AdminOrdersPage /></AdminLayout></AdminRoute>} />
         <Route path="/admin/products" element={<AdminRoute><AdminLayout><AdminProductsPage /></AdminLayout></AdminRoute>} />
+        <Route path="/admin/products/:id/edit" element={<AdminRoute><AdminLayout><AdminEditProductPage /></AdminLayout></AdminRoute>} />
       </Routes>
     </BrowserRouter>
   );

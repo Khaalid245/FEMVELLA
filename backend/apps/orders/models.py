@@ -1,6 +1,6 @@
 from django.db import models
 from django.conf import settings
-from apps.products.models import Product
+from apps.products.models import Product, ProductVariant
 from core.models import TimeStampedModel
 
 
@@ -35,6 +35,13 @@ class Order(TimeStampedModel):
 class OrderItem(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
     product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True)
+    variant = models.ForeignKey(
+        ProductVariant, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="order_items"
+    )
+    # Snapshots — preserved even if variant/product is later deleted
+    size_snapshot = models.CharField(max_length=20, blank=True, default="")
+    color_snapshot = models.CharField(max_length=50, blank=True, default="")
     quantity = models.PositiveIntegerField()
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
 

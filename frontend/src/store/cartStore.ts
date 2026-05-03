@@ -2,8 +2,11 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 export interface CartItem {
-  id: number;
+  id: number;         // product id
+  variant_id?: number;
   name: string;
+  size?: string;
+  color?: string;
   price: string;
   quantity: number;
   image: string;
@@ -24,9 +27,15 @@ export const useCartStore = create<CartState>()(
     (set, get) => ({
       items: [],
       addItem: (item) => {
-        const existing = get().items.find((i) => i.id === item.id);
+        const existing = get().items.find(
+          (i) => i.id === item.id && i.variant_id === item.variant_id
+        );
         if (existing) {
-          set({ items: get().items.map((i) => i.id === item.id ? { ...i, quantity: i.quantity + item.quantity } : i) });
+          set({ items: get().items.map((i) =>
+            i.id === item.id && i.variant_id === item.variant_id
+              ? { ...i, quantity: i.quantity + item.quantity }
+              : i
+          )});
         } else {
           set({ items: [...get().items, item] });
         }

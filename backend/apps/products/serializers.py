@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Category, Product, ProductImage, ProductColor, ProductSize
+from .models import Category, Product, ProductImage, ProductColor, ProductSize, ProductVariant
 
 
 class ProductImageSerializer(serializers.ModelSerializer):
@@ -42,16 +42,29 @@ class ProductSizeSerializer(serializers.ModelSerializer):
         fields = ("id", "size", "in_stock")
 
 
+class ProductVariantSerializer(serializers.ModelSerializer):
+    effective_price = serializers.ReadOnlyField()
+    in_stock = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProductVariant
+        fields = ("id", "size", "color", "stock", "price_override", "effective_price", "in_stock")
+
+    def get_in_stock(self, obj):
+        return obj.stock > 0
+
+
 class ProductSerializer(serializers.ModelSerializer):
     images = ProductImageSerializer(many=True, read_only=True)
     colors = ProductColorSerializer(many=True, read_only=True)
-    sizes = ProductSizeSerializer(many=True, read_only=True)
+    sizes = ProductSizeSerializer(many=True, read_only=True)   # legacy
+    variants = ProductVariantSerializer(many=True, read_only=True)
     category = CategorySerializer(read_only=True)
     category_id = serializers.PrimaryKeyRelatedField(
         queryset=Category.objects.all(), source="category", write_only=True
     )
     discount_percent = serializers.SerializerMethodField()
-    # Write-only — accepts uploaded file, creates ProductImage with is_primary=True
+    total_stock = serializers.ReadOnlyField()
     upload_image = serializers.ImageField(write_only=True, required=False)
 
     class Meta:
@@ -59,8 +72,9 @@ class ProductSerializer(serializers.ModelSerializer):
         fields = (
             "id", "name", "slug", "description", "category", "category_id",
             "price", "sale_price", "discount_percent",
-            "stock", "is_active", "is_featured", "is_new", "is_bestseller",
-            "upload_image", "images", "colors", "sizes",
+            "stock", "total_stock",
+            "is_active", "is_featured", "is_new", "is_bestseller",
+            "upload_image", "images", "colors", "sizes", "variants",
             "created_at", "updated_at",
         )
 

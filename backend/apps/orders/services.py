@@ -1,9 +1,9 @@
 from decimal import Decimal
-from typing import List
+from typing import List, Optional
 
 from django.db import transaction, IntegrityError
 
-from apps.products.models import Product
+from apps.products.models import Product, ProductVariant
 from .exceptions import (
     EmptyCartError,
     InsufficientStockError,
@@ -20,13 +20,14 @@ from .models import Order, OrderItem
 class CartItem:
     """Plain data container — no Django model, no serializer coupling."""
 
-    def __init__(self, product_id: int, quantity: int):
+    def __init__(self, product_id: int, quantity: int, variant_id: Optional[int] = None):
         self.product_id = product_id
         self.quantity = quantity
+        self.variant_id = variant_id  # None = no variant selected (product-level stock)
 
 
 # ---------------------------------------------------------------------------
-# Public API — the only entry point views should call
+# Public API
 # ---------------------------------------------------------------------------
 
 def create_order_from_cart(
@@ -36,41 +37,14 @@ def create_order_from_cart(
     notes: str = "",
     idempotency_key: str = "",
 ) -> tuple[Order, bool]:
-    """
-    Create an Order atomically from a list of CartItems.
-
-    Returns:
-        (order, created) — created=False means a duplicate request was detected
-        and the existing order was returned without touching stock.
-
-    Guarantees:
-    - All stock is validated before any write occurs.
-    - select_for_update() locks product rows for the duration of the
-      transaction, preventing concurrent orders from overselling.
-    - If anything fails the entire transaction rolls back — no partial orders.
-    - Price is snapshotted at the moment of purchase (sale_price takes
-      priority over price).
-    - If idempotency_key is provided and an order already exists for this
-      user+key, the existing order is returned immediately — no stock touched.
-
-    Raises:
-        EmptyCartError            – cart_items is empty
-        InvalidProductError       – product_id not found or inactive
-        OutOfStockError           – product stock is 0
-        InsufficientStockError    – requested quantity > available stock
-    """
     if not cart_items:
         raise EmptyCartError()
 
-    # ------------------------------------------------------------------
-    # Idempotency check — outside the transaction on purpose.
-    # A simple read before acquiring any locks. If the key exists we
-    # return immediately — zero writes, zero lock contention.
-    # ------------------------------------------------------------------
+    # Idempotency pre-check — outside transaction
     if idempotency_key:
         try:
             existing = (
-                Order.objects.prefetch_related("items__product")
+                Order.objects.prefetch_related("items__product", "items__variant")
                 .get(user=user, idempotency_key=idempotency_key)
             )
             return existing, False
@@ -78,45 +52,73 @@ def create_order_from_cart(
             pass
 
     with transaction.atomic():
-        # ------------------------------------------------------------------
-        # 1. Lock all relevant product rows in a deterministic order.
-        #    Ordering by pk avoids deadlocks when two concurrent transactions
-        #    try to lock the same rows in different orders.
-        # ------------------------------------------------------------------
-        requested_ids = [item.product_id for item in cart_items]
+        # ── Determine which items use variants vs product-level stock ──
+        variant_ids = [i.variant_id for i in cart_items if i.variant_id]
+        product_ids = [i.product_id for i in cart_items]
 
-        locked_products = (
-            Product.objects.select_for_update()
-            .filter(pk__in=requested_ids, is_active=True)
-            .order_by("pk")
-        )
+        # Lock variants first (ordered by pk to prevent deadlocks)
+        locked_variants: dict[int, ProductVariant] = {}
+        if variant_ids:
+            for v in (
+                ProductVariant.objects.select_for_update()
+                .filter(pk__in=variant_ids)
+                .order_by("pk")
+            ):
+                locked_variants[v.pk] = v
 
-        # Build a lookup so we can validate in O(1)
-        product_map: dict[int, Product] = {p.pk: p for p in locked_products}
+        # Lock products (for items without variants)
+        locked_products: dict[int, Product] = {}
+        no_variant_ids = [i.product_id for i in cart_items if not i.variant_id]
+        if no_variant_ids:
+            for p in (
+                Product.objects.select_for_update()
+                .filter(pk__in=no_variant_ids, is_active=True)
+                .order_by("pk")
+            ):
+                locked_products[p.pk] = p
 
-        # ------------------------------------------------------------------
-        # 2. Validate every item BEFORE touching the database.
-        #    Fail fast — raise on the first problem found.
-        # ------------------------------------------------------------------
-        _validate_cart(cart_items, product_map)
+        # Also load products for variant items (for price + name)
+        all_products: dict[int, Product] = {**locked_products}
+        variant_product_ids = [i.product_id for i in cart_items if i.variant_id]
+        if variant_product_ids:
+            for p in Product.objects.filter(pk__in=variant_product_ids, is_active=True):
+                all_products[p.pk] = p
 
-        # ------------------------------------------------------------------
-        # 3 + 4. Deduct stock and persist Order + OrderItems inside a single
-        #        savepoint. If a concurrent request already committed an order
-        #        with the same idempotency_key, the IntegrityError rolls back
-        #        this savepoint — including the stock deduction — cleanly.
-        #        The outer transaction remains alive for the recovery query.
-        # ------------------------------------------------------------------
+        # ── Validate all items before any write ──
+        _validate_cart(cart_items, all_products, locked_variants)
+
+        # ── Savepoint: deduct stock + create order ──
         try:
             with transaction.atomic():
                 total = Decimal("0.00")
-                for item in cart_items:
-                    product = product_map[item.product_id]
-                    unit_price = product.sale_price if product.sale_price else product.price
-                    total += unit_price * item.quantity
-                    product.stock -= item.quantity
+                order_items_to_create = []
 
-                Product.objects.bulk_update(list(product_map.values()), ["stock"])
+                for item in cart_items:
+                    product = all_products.get(item.product_id)
+                    if not product:
+                        raise InvalidProductError(item.product_id)
+
+                    if item.variant_id:
+                        variant = locked_variants[item.variant_id]
+                        unit_price = variant.effective_price
+                        variant.stock -= item.quantity
+                        size_snapshot = variant.size
+                        color_snapshot = variant.color
+                    else:
+                        variant = None
+                        unit_price = product.sale_price if product.sale_price else product.price
+                        product.stock -= item.quantity
+                        size_snapshot = ""
+                        color_snapshot = ""
+
+                    total += unit_price * item.quantity
+                    order_items_to_create.append((product, variant, item.quantity, unit_price, size_snapshot, color_snapshot))
+
+                # Bulk-update stock
+                if locked_variants:
+                    ProductVariant.objects.bulk_update(list(locked_variants.values()), ["stock"])
+                if locked_products:
+                    Product.objects.bulk_update(list(locked_products.values()), ["stock"])
 
                 order = Order.objects.create(
                     user=user,
@@ -127,69 +129,74 @@ def create_order_from_cart(
                     idempotency_key=idempotency_key,
                 )
 
-                order_items = []
-                for item in cart_items:
-                    product = product_map[item.product_id]
-                    unit_price = product.sale_price if product.sale_price else product.price
-                    order_items.append(
-                        OrderItem(
-                            order=order,
-                            product=product,
-                            quantity=item.quantity,
-                            unit_price=unit_price,
-                        )
+                OrderItem.objects.bulk_create([
+                    OrderItem(
+                        order=order,
+                        product=product,
+                        variant=variant,
+                        quantity=qty,
+                        unit_price=price,
+                        size_snapshot=size_snap,
+                        color_snapshot=color_snap,
                     )
-
-                OrderItem.objects.bulk_create(order_items)
+                    for product, variant, qty, price, size_snap, color_snap in order_items_to_create
+                ])
 
         except IntegrityError:
-            # Concurrent request won the race. Savepoint rolled back —
-            # stock deduction included. Fetch and return the winner's order.
             if not idempotency_key:
-                raise  # genuine integrity error unrelated to idempotency
-
+                raise
             existing = (
-                Order.objects.prefetch_related("items__product")
+                Order.objects.prefetch_related("items__product", "items__variant")
                 .get(user=user, idempotency_key=idempotency_key)
             )
             return existing, False
 
-    # Return the fully populated order outside the lock
-    return Order.objects.prefetch_related("items__product").get(pk=order.pk), True
+    return (
+        Order.objects.prefetch_related("items__product", "items__variant").get(pk=order.pk),
+        True,
+    )
 
 
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
 
-def _validate_cart(cart_items: List[CartItem], product_map: dict) -> None:
-    """
-    Validate all items against locked product rows.
-    Raises on the first violation found.
-    """
-    seen_ids: set[int] = set()
+def _validate_cart(
+    cart_items: List[CartItem],
+    product_map: dict,
+    variant_map: dict,
+) -> None:
+    seen: set[tuple] = set()
 
     for item in cart_items:
-        # Duplicate product_id in the same cart
-        if item.product_id in seen_ids:
-            # Merge duplicates upstream; here we just skip — the caller's
-            # serializer should deduplicate, but we handle it defensively.
+        key = (item.product_id, item.variant_id)
+        if key in seen:
             continue
-        seen_ids.add(item.product_id)
+        seen.add(key)
 
-        # Product not found or inactive
         product = product_map.get(item.product_id)
         if product is None:
             raise InvalidProductError(item.product_id)
 
-        # Product exists but stock is zero
-        if product.stock == 0:
-            raise OutOfStockError(product.name, available=0)
-
-        # Requested more than available
-        if item.quantity > product.stock:
-            raise InsufficientStockError(
-                product.name,
-                requested=item.quantity,
-                available=product.stock,
-            )
+        if item.variant_id:
+            variant = variant_map.get(item.variant_id)
+            if variant is None or variant.product_id != item.product_id:
+                raise InvalidProductError(item.product_id)
+            if variant.stock == 0:
+                raise OutOfStockError(f"{product.name} ({variant.size})", available=0)
+            if item.quantity > variant.stock:
+                raise InsufficientStockError(
+                    f"{product.name} ({variant.size})",
+                    requested=item.quantity,
+                    available=variant.stock,
+                )
+        else:
+            # No variant — use product-level stock
+            if product.stock == 0:
+                raise OutOfStockError(product.name, available=0)
+            if item.quantity > product.stock:
+                raise InsufficientStockError(
+                    product.name,
+                    requested=item.quantity,
+                    available=product.stock,
+                )

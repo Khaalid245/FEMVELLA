@@ -45,7 +45,11 @@ export function useCheckout(): CheckoutState {
 
     try {
       const payload = {
-        items: cartItems.map((i) => ({ product_id: i.id, quantity: i.quantity })),
+        items: cartItems.map((i) => ({
+          product_id: i.id,
+          quantity: i.quantity,
+          ...(i.variant_id && { variant_id: i.variant_id }),
+        })),
         shipping_address: address,
         notes,
         idempotency_key: idempotencyKey,
