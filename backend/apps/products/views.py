@@ -14,11 +14,6 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
 
 class ProductViewSet(viewsets.ModelViewSet):
-    queryset = (
-        Product.objects.filter(is_active=True)
-        .select_related("category")
-        .prefetch_related("images", "colors", "sizes")
-    )
     serializer_class = ProductSerializer
     permission_classes = (IsAdminOrReadOnly,)
     lookup_field = "slug"
@@ -27,3 +22,10 @@ class ProductViewSet(viewsets.ModelViewSet):
     search_fields = ("name", "description")
     ordering_fields = ("price", "created_at")
     ordering = ("-created_at",)
+
+    def get_queryset(self):
+        qs = Product.objects.select_related("category").prefetch_related("images", "colors", "sizes")
+        # Admin sees all products including inactive
+        if self.request.user.is_staff:
+            return qs.all()
+        return qs.filter(is_active=True)

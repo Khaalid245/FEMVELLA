@@ -1,6 +1,6 @@
 import { memo, useState } from "react";
 import { Link } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import type { Product } from "@/api/products";
 import { useCartStore } from "@/store/cartStore";
 
@@ -21,6 +21,7 @@ function LuxuryProductCard({ product }: Props) {
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     if (isOutOfStock) return;
     addItem({
       id: product.id,
@@ -82,24 +83,7 @@ function LuxuryProductCard({ product }: Props) {
           </svg>
         </button>
 
-        {/* Add to Cart — hover reveal */}
-        <AnimatePresence>
-          {!isOutOfStock && (
-            <motion.button
-              initial={{ opacity: 0, y: 8 }}
-              whileInView={{ opacity: 1 }}
-              animate={{ opacity: 0 }}
-              className="absolute bottom-0 left-0 right-0 py-3 text-white text-[11px] tracking-[0.18em] uppercase font-medium"
-              style={{ background: "rgba(44,36,32,0.92)" }}
-              whileHover={{ opacity: 1 }}
-              onClick={handleAddToCart}
-            >
-              {addedFeedback ? "Added ✓" : "Add to Cart"}
-            </motion.button>
-          )}
-        </AnimatePresence>
-
-        {/* Hover reveal via CSS group */}
+        {/* Add to Cart — hover reveal (outside Link click area via pointer-events) */}
         <button
           onClick={handleAddToCart}
           disabled={isOutOfStock}

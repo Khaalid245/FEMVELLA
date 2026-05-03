@@ -15,7 +15,7 @@ class Order(TimeStampedModel):
         FAILED = "failed", "Failed"
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="orders")
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True)
     total_price = models.DecimalField(max_digits=10, decimal_places=2)
     shipping_address = models.TextField()
     notes = models.TextField(blank=True)
@@ -24,6 +24,8 @@ class Order(TimeStampedModel):
     class Meta:
         indexes = [
             models.Index(fields=["user", "idempotency_key"], name="order_user_idempotency_idx"),
+            models.Index(fields=["created_at"], name="order_created_at_idx"),
+            models.Index(fields=["status", "created_at"], name="order_status_created_idx"),
         ]
 
     def __str__(self):
@@ -39,3 +41,21 @@ class OrderItem(models.Model):
     @property
     def subtotal(self):
         return self.quantity * self.unit_price
+
+
+class OrderStatusHistory(models.Model):
+    """Audit log — every status transition is recorded here."""
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="history")
+    old_status = models.CharField(max_length=20)
+    new_status = models.CharField(max_length=20)
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, related_name="order_status_changes"
+    )
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-timestamp"]
+
+    def __str__(self):
+        return f"Order #{self.order_id}: {self.old_status} → {self.new_status}"

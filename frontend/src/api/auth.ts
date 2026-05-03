@@ -4,9 +4,17 @@ import { useAuthStore } from "@/store/authStore";
 
 export const useLogin = () =>
   useMutation({
-    mutationFn: (creds: { email: string; password: string }) =>
-      api.post("/auth/token/", creds).then((r) => r.data),
-    onSuccess: (data) => useAuthStore.getState().setTokens(data.access, data.refresh),
+    mutationFn: async (creds: { email: string; password: string }) => {
+      // Step 1 — get tokens
+      const { data: tokens } = await api.post("/auth/token/", creds);
+      useAuthStore.getState().setTokens(tokens.access, tokens.refresh);
+
+      // Step 2 — fetch profile with the new token (guaranteed before onSuccess fires)
+      const { data: profile } = await api.get("/accounts/profile/");
+      useAuthStore.getState().setUser(profile);
+
+      return profile; // returned as mutation data
+    },
   });
 
 export const useRegister = () =>

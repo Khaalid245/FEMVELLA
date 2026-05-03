@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from apps.products.models import Product
-from .models import Order, OrderItem
+from .models import Order, OrderItem, OrderStatusHistory
 
 
 # ---------------------------------------------------------------------------
@@ -53,11 +53,13 @@ class OrderItemOutputSerializer(serializers.ModelSerializer):
 
 class OrderOutputSerializer(serializers.ModelSerializer):
     items = OrderItemOutputSerializer(many=True, read_only=True)
+    user_email = serializers.EmailField(source="user.email", read_only=True)
 
     class Meta:
         model = Order
         fields = (
             "id",
+            "user_email",
             "status",
             "total_price",
             "shipping_address",
@@ -66,3 +68,11 @@ class OrderOutputSerializer(serializers.ModelSerializer):
             "items",
             "created_at",
         )
+
+
+class OrderStatusHistorySerializer(serializers.ModelSerializer):
+    changed_by_email = serializers.EmailField(source="changed_by.email", read_only=True, default=None)
+
+    class Meta:
+        model = OrderStatusHistory
+        fields = ("id", "old_status", "new_status", "changed_by_email", "timestamp")

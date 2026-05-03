@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import Navbar from "./Navbar";
 import TrustBar from "./TrustBar";
+import Footer from "./Footer";
 
 interface LayoutProps {
   children: ReactNode;
@@ -16,9 +17,7 @@ export default function Layout({ children, hero }: LayoutProps) {
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
         {children}
       </main>
-      <footer className="border-t border-gray-100 py-8 text-center text-sm text-gray-400">
-        © {new Date().getFullYear()} Femvelle. All rights reserved.
-      </footer>
+      <Footer />
     </div>
   );
 }
