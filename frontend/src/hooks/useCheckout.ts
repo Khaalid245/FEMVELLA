@@ -49,6 +49,7 @@ export function useCheckout(): CheckoutState {
           product_id: i.id,
           quantity: i.quantity,
           ...(i.variant_id && { variant_id: i.variant_id }),
+          ...(i.customization_text && { customization_text: i.customization_text }),
         })),
         shipping_address: address,
         notes,

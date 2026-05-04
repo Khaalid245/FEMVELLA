@@ -9,18 +9,29 @@ from .models import Order, OrderItem, OrderStatusHistory
 # ---------------------------------------------------------------------------
 
 class CartItemInputSerializer(serializers.Serializer):
-    product_id = serializers.IntegerField(min_value=1)
-    quantity   = serializers.IntegerField(min_value=1, max_value=100)
-    variant_id = serializers.IntegerField(min_value=1, required=False, allow_null=True, default=None)
+    product_id         = serializers.IntegerField(min_value=1)
+    quantity           = serializers.IntegerField(min_value=1, max_value=100)
+    variant_id         = serializers.IntegerField(min_value=1, required=False, allow_null=True, default=None)
+    customization_text = serializers.CharField(required=False, allow_blank=True, default="", max_length=200)
 
     def validate(self, data):
-        product_id = data["product_id"]
-        variant_id = data.get("variant_id")
+        product_id         = data["product_id"]
+        variant_id         = data.get("variant_id")
+        customization_text = data.get("customization_text", "")
 
-        if not Product.objects.filter(pk=product_id, is_active=True).exists():
+        try:
+            product = Product.objects.get(pk=product_id, is_active=True)
+        except Product.DoesNotExist:
             raise serializers.ValidationError(
                 {"product_id": f"Product {product_id} does not exist or is inactive."}
             )
+
+        # Customization only allowed on customizable products
+        if customization_text and not product.is_customizable:
+            raise serializers.ValidationError(
+                {"customization_text": "This product does not support customization."}
+            )
+
         if variant_id:
             if not ProductVariant.objects.filter(pk=variant_id, product_id=product_id).exists():
                 raise serializers.ValidationError(
@@ -38,10 +49,10 @@ class CreateOrderSerializer(serializers.Serializer):
     notes = serializers.CharField(required=False, allow_blank=True, default="", max_length=1000)
 
     def validate_items(self, items):
-        # Deduplicate by (product_id, variant_id) — merge quantities
+        # Deduplicate by (product_id, variant_id, customization_text)
         merged: dict[tuple, dict] = {}
         for item in items:
-            key = (item["product_id"], item.get("variant_id"))
+            key = (item["product_id"], item.get("variant_id"), item.get("customization_text", ""))
             if key in merged:
                 merged[key]["quantity"] += item["quantity"]
             else:
@@ -62,7 +73,7 @@ class OrderItemOutputSerializer(serializers.ModelSerializer):
     class Meta:
         model  = OrderItem
         fields = ("id", "product", "product_name", "variant", "size", "color",
-                  "quantity", "unit_price", "subtotal")
+                  "customization_text", "quantity", "unit_price", "subtotal")
 
     def get_size(self, obj):
         return obj.size_snapshot or (obj.variant.size if obj.variant else "")

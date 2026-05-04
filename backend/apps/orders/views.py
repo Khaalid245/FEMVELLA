@@ -55,6 +55,7 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
                 product_id=i["product_id"],
                 quantity=i["quantity"],
                 variant_id=i.get("variant_id"),
+                customization_text=i.get("customization_text", ""),
             )
             for i in v["items"]
         ]

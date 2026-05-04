@@ -42,6 +42,7 @@ class OrderItem(models.Model):
     # Snapshots — preserved even if variant/product is later deleted
     size_snapshot = models.CharField(max_length=20, blank=True, default="")
     color_snapshot = models.CharField(max_length=50, blank=True, default="")
+    customization_text = models.CharField(max_length=200, blank=True, default="")
     quantity = models.PositiveIntegerField()
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
 

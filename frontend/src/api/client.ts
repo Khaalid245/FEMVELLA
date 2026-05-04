@@ -1,7 +1,9 @@
 import axios from "axios";
 import { useAuthStore } from "@/store/authStore";
 
-const api = axios.create({ baseURL: "/api" });
+const api = axios.create({ 
+  baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000/api" 
+});
 
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().accessToken;
@@ -17,7 +19,7 @@ api.interceptors.response.use(
       original._retry = true;
       try {
         const refresh = useAuthStore.getState().refreshToken;
-        const { data } = await axios.post("/api/auth/token/refresh/", { refresh });
+        const { data } = await axios.post(`${import.meta.env.VITE_API_URL || "http://localhost:8000/api"}/auth/token/refresh/`, { refresh });
         useAuthStore.getState().setTokens(data.access, refresh!);
         original.headers.Authorization = `Bearer ${data.access}`;
         return api(original);

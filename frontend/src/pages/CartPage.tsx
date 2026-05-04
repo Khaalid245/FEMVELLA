@@ -30,12 +30,12 @@ export default function CartPage() {
                 <h3 className="font-medium text-gray-900">{item.name}</h3>
                 <p className="text-brand-600 font-semibold mt-1">${item.price}</p>
                 <div className="flex items-center gap-2 mt-2">
-                  <button onClick={() => updateQuantity(item.id, Math.max(1, item.quantity - 1))} className="w-7 h-7 border rounded flex items-center justify-center text-gray-600 hover:bg-gray-50">−</button>
+                  <button onClick={() => updateQuantity(item.id, Math.max(1, item.quantity - 1), item.variant_id, item.customization_text)} className="w-7 h-7 border rounded flex items-center justify-center text-gray-600 hover:bg-gray-50">−</button>
                   <span className="w-8 text-center text-sm">{item.quantity}</span>
-                  <button onClick={() => updateQuantity(item.id, item.quantity + 1)} className="w-7 h-7 border rounded flex items-center justify-center text-gray-600 hover:bg-gray-50">+</button>
+                  <button onClick={() => updateQuantity(item.id, item.quantity + 1, item.variant_id, item.customization_text)} className="w-7 h-7 border rounded flex items-center justify-center text-gray-600 hover:bg-gray-50">+</button>
                 </div>
               </div>
-              <button onClick={() => removeItem(item.id)} className="text-gray-300 hover:text-red-400 text-sm self-start">✕</button>
+              <button onClick={() => removeItem(item.id, item.variant_id, item.customization_text)} className="text-gray-300 hover:text-red-400 text-sm self-start">✕</button>
             </div>
           ))}
         </div>

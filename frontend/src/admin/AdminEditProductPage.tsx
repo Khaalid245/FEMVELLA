@@ -18,7 +18,7 @@ export default function AdminEditProductPage() {
     ? categoriesData
     : (categoriesData?.results ?? []);
 
-  // Fetch product by id
+  // Fetch product by slug (not id)
   const { data: product, isLoading } = useQuery({
     queryKey: ["admin-product", id],
     queryFn: () => api.get(`/products/${id}/`).then((r) => r.data),
@@ -29,7 +29,16 @@ export default function AdminEditProductPage() {
     name: "", slug: "", description: "", price: "",
     sale_price: "", stock: "", category_id: "",
     is_active: true, is_featured: false, is_new: false, is_bestseller: false,
+    is_customizable: false,
   });
+
+  const [variants, setVariants] = useState<Array<{
+    id?: number;
+    size: string;
+    color: string;
+    stock: number;
+    price_override: string;
+  }>>([]);
 
   // Populate form once product loads
   useEffect(() => {
@@ -46,13 +55,21 @@ export default function AdminEditProductPage() {
         is_featured:   product.is_featured ?? false,
         is_new:        product.is_new ?? false,
         is_bestseller: product.is_bestseller ?? false,
+        is_customizable: product.is_customizable ?? false,
       });
+      setVariants(product.variants?.map((v: any) => ({
+        id: v.id,
+        size: v.size,
+        color: v.color || "",
+        stock: v.stock,
+        price_override: v.price_override || "",
+      })) || []);
     }
   }, [product]);
 
   const { mutate: updateProduct, isPending } = useMutation({
     mutationFn: (fd: FormData) =>
-      api.patch(`/products/${product?.slug}/`, fd, {
+      api.patch(`/products/${id}/`, fd, {
         headers: { "Content-Type": "multipart/form-data" },
       }).then((r) => r.data),
     onSuccess: () => {
@@ -65,6 +82,20 @@ export default function AdminEditProductPage() {
 
   const set = (k: string, v: string | boolean) =>
     setForm((f) => ({ ...f, [k]: v }));
+
+  const addVariant = () => {
+    setVariants([...variants, { size: "", color: "", stock: 0, price_override: "" }]);
+  };
+
+  const removeVariant = (index: number) => {
+    setVariants(variants.filter((_, i) => i !== index));
+  };
+
+  const updateVariant = (index: number, field: string, value: string | number) => {
+    setVariants(variants.map((v, i) => 
+      i === index ? { ...v, [field]: value } : v
+    ));
+  };
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -80,6 +111,10 @@ export default function AdminEditProductPage() {
     fd.append("is_featured",   form.is_featured   ? "true" : "false");
     fd.append("is_new",        form.is_new        ? "true" : "false");
     fd.append("is_bestseller", form.is_bestseller ? "true" : "false");
+    fd.append("is_customizable", form.is_customizable ? "true" : "false");
+    
+    // Add variants data
+    fd.append("variants", JSON.stringify(variants));
     const file = fileRef.current?.files?.[0];
     if (file) fd.append("upload_image", file);
     updateProduct(fd);
@@ -200,6 +235,119 @@ export default function AdminEditProductPage() {
         <div>
           <label style={labelStyle}>Description</label>
           <textarea value={form.description} onChange={(e) => set("description", e.target.value)} rows={4} style={{ ...inputStyle, resize: "vertical" }} />
+        </div>
+
+        {/* Customizable toggle */}
+        <div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.is_customizable}
+              onChange={(e) => set("is_customizable", e.target.checked)}
+              style={{ accentColor: "#2C2420", width: "14px", height: "14px" }}
+            />
+            <span style={{ fontFamily: "'Inter', sans-serif", fontSize: "12px", color: "#2C2420" }}>Customizable product</span>
+          </label>
+        </div>
+
+        {/* Variants Section */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <label style={labelStyle}>Product Variants</label>
+            <button
+              type="button"
+              onClick={addVariant}
+              style={{
+                fontFamily: "'Inter', sans-serif",
+                fontSize: "10px",
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                color: "#fff",
+                background: "#C4985A",
+                border: "none",
+                padding: "6px 12px",
+                cursor: "pointer",
+                borderRadius: "3px"
+              }}
+            >
+              + Add Variant
+            </button>
+          </div>
+          
+          {variants.length === 0 ? (
+            <p style={{ fontFamily: "'Inter', sans-serif", fontSize: "12px", color: "#9E8E88", fontStyle: "italic" }}>
+              No variants added. Click "Add Variant" to create size options.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {variants.map((variant, index) => (
+                <div key={index} style={{ border: "1px solid #DDD5CE", padding: "12px", borderRadius: "3px", background: "#FEFEFE" }}>
+                  <div className="grid grid-cols-4 gap-3 mb-3">
+                    <div>
+                      <label style={{ ...labelStyle, fontSize: "9px", marginBottom: "3px" }}>Size *</label>
+                      <input
+                        required
+                        value={variant.size}
+                        onChange={(e) => updateVariant(index, "size", e.target.value)}
+                        placeholder="XS, S, M, L, XL"
+                        style={{ ...inputStyle, fontSize: "12px", padding: "6px 8px" }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ ...labelStyle, fontSize: "9px", marginBottom: "3px" }}>Color</label>
+                      <input
+                        value={variant.color}
+                        onChange={(e) => updateVariant(index, "color", e.target.value)}
+                        placeholder="Optional"
+                        style={{ ...inputStyle, fontSize: "12px", padding: "6px 8px" }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ ...labelStyle, fontSize: "9px", marginBottom: "3px" }}>Stock *</label>
+                      <input
+                        required
+                        type="number"
+                        min="0"
+                        value={variant.stock}
+                        onChange={(e) => updateVariant(index, "stock", parseInt(e.target.value) || 0)}
+                        style={{ ...inputStyle, fontSize: "12px", padding: "6px 8px" }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ ...labelStyle, fontSize: "9px", marginBottom: "3px" }}>Price Override</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={variant.price_override}
+                        onChange={(e) => updateVariant(index, "price_override", e.target.value)}
+                        placeholder="Optional"
+                        style={{ ...inputStyle, fontSize: "12px", padding: "6px 8px" }}
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeVariant(index)}
+                    style={{
+                      fontFamily: "'Inter', sans-serif",
+                      fontSize: "9px",
+                      letterSpacing: "0.1em",
+                      textTransform: "uppercase",
+                      color: "#E57373",
+                      background: "transparent",
+                      border: "1px solid #E57373",
+                      padding: "4px 8px",
+                      cursor: "pointer",
+                      borderRadius: "2px"
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Flags */}

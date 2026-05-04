@@ -16,9 +16,31 @@ function AddProductModal({ onClose }: { onClose: () => void }) {
     name: "", slug: "", description: "", price: "",
     sale_price: "", stock: "0", category_id: "",
     is_active: true, is_featured: false, is_new: false, is_bestseller: false,
+    is_customizable: false,
   });
 
+  const [variants, setVariants] = useState<Array<{
+    size: string;
+    color: string;
+    stock: number;
+    price_override: string;
+  }>>([]);
+
   const set = (k: string, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }));
+
+  const addVariant = () => {
+    setVariants([...variants, { size: "", color: "", stock: 0, price_override: "" }]);
+  };
+
+  const removeVariant = (index: number) => {
+    setVariants(variants.filter((_, i) => i !== index));
+  };
+
+  const updateVariant = (index: number, field: string, value: string | number) => {
+    setVariants(variants.map((v, i) => 
+      i === index ? { ...v, [field]: value } : v
+    ));
+  };
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -38,6 +60,10 @@ function AddProductModal({ onClose }: { onClose: () => void }) {
     fd.append("is_featured",   form.is_featured   ? "true" : "false");
     fd.append("is_new",        form.is_new        ? "true" : "false");
     fd.append("is_bestseller", form.is_bestseller ? "true" : "false");
+    fd.append("is_customizable", form.is_customizable ? "true" : "false");
+    
+    // Add variants data
+    fd.append("variants", JSON.stringify(variants));
 
     // Image file
     const file = fileRef.current?.files?.[0];
@@ -153,6 +179,121 @@ function AddProductModal({ onClose }: { onClose: () => void }) {
             )}
           </div>
 
+          {/* Customizable toggle */}
+          <div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.is_customizable}
+                onChange={(e) => set("is_customizable", e.target.checked)}
+                style={{ accentColor: "#2C2420", width: "14px", height: "14px" }}
+              />
+              <span style={{ fontFamily: "'Inter', sans-serif", fontSize: "12px", color: "#2C2420" }}>Customizable product</span>
+            </label>
+          </div>
+
+          {/* Variants Section */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <label style={labelStyle}>Product Variants</label>
+              <button
+                type="button"
+                onClick={addVariant}
+                style={{
+                  fontFamily: "'Inter', sans-serif",
+                  fontSize: "10px",
+                  letterSpacing: "0.12em",
+                  textTransform: "uppercase",
+                  color: "#fff",
+                  background: "#C4985A",
+                  border: "none",
+                  padding: "6px 12px",
+                  cursor: "pointer",
+                  borderRadius: "3px"
+                }}
+              >
+                + Add Variant
+              </button>
+            </div>
+            
+            {variants.length === 0 ? (
+              <p style={{ fontFamily: "'Inter', sans-serif", fontSize: "12px", color: "#9E8E88", fontStyle: "italic" }}>
+                No variants added. Click "Add Variant" to create size options.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {variants.map((variant, index) => (
+                  <div key={index} style={{ border: "1px solid #DDD5CE", padding: "12px", borderRadius: "3px", background: "#FEFEFE" }}>
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div>
+                        <label style={{ ...labelStyle, fontSize: "9px", marginBottom: "3px" }}>Size *</label>
+                        <input
+                          required
+                          value={variant.size}
+                          onChange={(e) => updateVariant(index, "size", e.target.value)}
+                          placeholder="XS, S, M, L, XL"
+                          style={{ ...inputStyle, fontSize: "12px", padding: "6px 8px" }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ ...labelStyle, fontSize: "9px", marginBottom: "3px" }}>Stock *</label>
+                        <input
+                          required
+                          type="number"
+                          min="0"
+                          value={variant.stock}
+                          onChange={(e) => updateVariant(index, "stock", parseInt(e.target.value) || 0)}
+                          style={{ ...inputStyle, fontSize: "12px", padding: "6px 8px" }}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div>
+                        <label style={{ ...labelStyle, fontSize: "9px", marginBottom: "3px" }}>Color</label>
+                        <input
+                          value={variant.color}
+                          onChange={(e) => updateVariant(index, "color", e.target.value)}
+                          placeholder="Optional"
+                          style={{ ...inputStyle, fontSize: "12px", padding: "6px 8px" }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ ...labelStyle, fontSize: "9px", marginBottom: "3px" }}>Price Override</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={variant.price_override}
+                          onChange={(e) => updateVariant(index, "price_override", e.target.value)}
+                          placeholder="Optional"
+                          style={{ ...inputStyle, fontSize: "12px", padding: "6px 8px" }}
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeVariant(index)}
+                      style={{
+                        fontFamily: "'Inter', sans-serif",
+                        fontSize: "9px",
+                        letterSpacing: "0.1em",
+                        textTransform: "uppercase",
+                        color: "#E57373",
+                        background: "transparent",
+                        border: "1px solid #E57373",
+                        padding: "4px 8px",
+                        cursor: "pointer",
+                        borderRadius: "2px"
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Flags */}
           <div className="grid grid-cols-2 gap-2">
             {([
@@ -258,7 +399,7 @@ export default function AdminProductsPage() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #EDE8E3", background: "#FAF7F4" }}>
-                {["Image", "Name", "Category", "Price", "Stock", "Status", "Actions"].map((h) => (
+                {["Image", "Name", "Category", "Price", "Variants", "Stock", "Status", "Actions"].map((h) => (
                   <th key={h} style={{ fontFamily: "'Inter', sans-serif", fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#9E8E88", textAlign: "left", padding: "12px 16px", fontWeight: 500, whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
@@ -267,7 +408,7 @@ export default function AdminProductsPage() {
               {isLoading
                 ? Array.from({ length: 8 }).map((_, i) => (
                     <tr key={i} style={{ borderBottom: "1px solid #F5F0EB" }}>
-                      {Array.from({ length: 7 }).map((__, j) => (
+                      {Array.from({ length: 8 }).map((__, j) => (
                         <td key={j} style={{ padding: "14px 16px" }}>
                           <div className="animate-pulse" style={{ height: "13px", background: "#EDE8E3", borderRadius: "4px", width: "75%" }} />
                         </td>
@@ -277,7 +418,7 @@ export default function AdminProductsPage() {
                 : products.length === 0
                 ? (
                     <tr>
-                      <td colSpan={7} style={{ padding: "48px 16px", textAlign: "center", fontFamily: "'Inter', sans-serif", fontSize: "13px", color: "#9E8E88" }}>
+                      <td colSpan={8} style={{ padding: "48px 16px", textAlign: "center", fontFamily: "'Inter', sans-serif", fontSize: "13px", color: "#9E8E88" }}>
                         No products found.
                       </td>
                     </tr>
@@ -302,6 +443,41 @@ export default function AdminProductsPage() {
                           {product.sale_price
                             ? <span><span style={{ color: "#C4985A" }}>${product.sale_price}</span><span style={{ color: "#9E8E88", textDecoration: "line-through", marginLeft: "6px", fontSize: "11px" }}>${product.price}</span></span>
                             : `$${product.price}`}
+                        </td>
+                        <td style={{ padding: "10px 16px", maxWidth: "150px" }}>
+                          {product.variants && product.variants.length > 0 ? (
+                            <div>
+                              <div style={{ fontFamily: "'Inter', sans-serif", fontSize: "10px", color: "#9E8E88", marginBottom: "4px" }}>
+                                {product.variants.length} variant{product.variants.length > 1 ? 's' : ''}
+                              </div>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: "3px" }}>
+                                {product.variants.slice(0, 4).map((variant: any, idx: number) => (
+                                  <span
+                                    key={idx}
+                                    style={{
+                                      fontFamily: "'Inter', sans-serif",
+                                      fontSize: "9px",
+                                      padding: "2px 6px",
+                                      background: "#F5F0EB",
+                                      color: "#6B5B55",
+                                      borderRadius: "2px",
+                                      whiteSpace: "nowrap"
+                                    }}
+                                  >
+                                    {variant.size}{variant.color ? `/${variant.color}` : ''}
+                                    <span style={{ color: "#9E8E88", marginLeft: "2px" }}>({variant.stock})</span>
+                                  </span>
+                                ))}
+                                {product.variants.length > 4 && (
+                                  <span style={{ fontFamily: "'Inter', sans-serif", fontSize: "9px", color: "#9E8E88" }}>+{product.variants.length - 4}</span>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <span style={{ fontFamily: "'Inter', sans-serif", fontSize: "11px", color: "#9E8E88", fontStyle: "italic" }}>
+                              No variants
+                            </span>
+                          )}
                         </td>
                         <td style={{ padding: "10px 16px" }}>
                           <span style={{ fontFamily: "'Inter', sans-serif", fontSize: "12px", color: product.stock === 0 ? "#EF4444" : isLowStock ? "#F59E0B" : "#2C2420", fontWeight: isLowStock || product.stock === 0 ? 600 : 400 }}>

@@ -20,10 +20,13 @@ from .models import Order, OrderItem
 class CartItem:
     """Plain data container — no Django model, no serializer coupling."""
 
-    def __init__(self, product_id: int, quantity: int, variant_id: Optional[int] = None):
-        self.product_id = product_id
-        self.quantity = quantity
-        self.variant_id = variant_id  # None = no variant selected (product-level stock)
+    def __init__(self, product_id: int, quantity: int,
+                 variant_id: Optional[int] = None,
+                 customization_text: str = ""):
+        self.product_id         = product_id
+        self.quantity           = quantity
+        self.variant_id         = variant_id
+        self.customization_text = customization_text
 
 
 # ---------------------------------------------------------------------------
@@ -40,7 +43,6 @@ def create_order_from_cart(
     if not cart_items:
         raise EmptyCartError()
 
-    # Idempotency pre-check — outside transaction
     if idempotency_key:
         try:
             existing = (
@@ -52,11 +54,8 @@ def create_order_from_cart(
             pass
 
     with transaction.atomic():
-        # ── Determine which items use variants vs product-level stock ──
         variant_ids = [i.variant_id for i in cart_items if i.variant_id]
-        product_ids = [i.product_id for i in cart_items]
 
-        # Lock variants first (ordered by pk to prevent deadlocks)
         locked_variants: dict[int, ProductVariant] = {}
         if variant_ids:
             for v in (
@@ -66,7 +65,6 @@ def create_order_from_cart(
             ):
                 locked_variants[v.pk] = v
 
-        # Lock products (for items without variants)
         locked_products: dict[int, Product] = {}
         no_variant_ids = [i.product_id for i in cart_items if not i.variant_id]
         if no_variant_ids:
@@ -77,17 +75,14 @@ def create_order_from_cart(
             ):
                 locked_products[p.pk] = p
 
-        # Also load products for variant items (for price + name)
         all_products: dict[int, Product] = {**locked_products}
         variant_product_ids = [i.product_id for i in cart_items if i.variant_id]
         if variant_product_ids:
             for p in Product.objects.filter(pk__in=variant_product_ids, is_active=True):
                 all_products[p.pk] = p
 
-        # ── Validate all items before any write ──
         _validate_cart(cart_items, all_products, locked_variants)
 
-        # ── Savepoint: deduct stock + create order ──
         try:
             with transaction.atomic():
                 total = Decimal("0.00")
@@ -102,19 +97,21 @@ def create_order_from_cart(
                         variant = locked_variants[item.variant_id]
                         unit_price = variant.effective_price
                         variant.stock -= item.quantity
-                        size_snapshot = variant.size
+                        size_snapshot  = variant.size
                         color_snapshot = variant.color
                     else:
                         variant = None
                         unit_price = product.sale_price if product.sale_price else product.price
                         product.stock -= item.quantity
-                        size_snapshot = ""
+                        size_snapshot  = ""
                         color_snapshot = ""
 
                     total += unit_price * item.quantity
-                    order_items_to_create.append((product, variant, item.quantity, unit_price, size_snapshot, color_snapshot))
+                    order_items_to_create.append((
+                        product, variant, item.quantity, unit_price,
+                        size_snapshot, color_snapshot, item.customization_text,
+                    ))
 
-                # Bulk-update stock
                 if locked_variants:
                     ProductVariant.objects.bulk_update(list(locked_variants.values()), ["stock"])
                 if locked_products:
@@ -138,8 +135,10 @@ def create_order_from_cart(
                         unit_price=price,
                         size_snapshot=size_snap,
                         color_snapshot=color_snap,
+                        customization_text=custom_text,
                     )
-                    for product, variant, qty, price, size_snap, color_snap in order_items_to_create
+                    for product, variant, qty, price, size_snap, color_snap, custom_text
+                    in order_items_to_create
                 ])
 
         except IntegrityError:
@@ -191,7 +190,6 @@ def _validate_cart(
                     available=variant.stock,
                 )
         else:
-            # No variant — use product-level stock
             if product.stock == 0:
                 raise OutOfStockError(product.name, available=0)
             if item.quantity > product.stock:

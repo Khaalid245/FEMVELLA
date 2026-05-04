@@ -24,6 +24,7 @@ export interface Product {
   is_featured: boolean;
   is_new: boolean;
   is_bestseller: boolean;
+  is_customizable: boolean;
   images: { id: number; image: string; is_primary: boolean }[];
   colors: { id: number; name: string; hex_code: string }[];
   sizes: { id: number; size: string; in_stock: boolean }[];

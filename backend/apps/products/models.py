@@ -27,6 +27,7 @@ class Product(TimeStampedModel):
     is_featured = models.BooleanField(default=False)
     is_new = models.BooleanField(default=False)
     is_bestseller = models.BooleanField(default=False)
+    is_customizable = models.BooleanField(default=False)
 
     def __str__(self):
         return self.name

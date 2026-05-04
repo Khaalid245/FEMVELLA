@@ -73,7 +73,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "id", "name", "slug", "description", "category", "category_id",
             "price", "sale_price", "discount_percent",
             "stock", "total_stock",
-            "is_active", "is_featured", "is_new", "is_bestseller",
+            "is_active", "is_featured", "is_new", "is_bestseller", "is_customizable",
             "upload_image", "images", "colors", "sizes", "variants",
             "created_at", "updated_at",
         )

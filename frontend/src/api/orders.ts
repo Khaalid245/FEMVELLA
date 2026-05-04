@@ -22,7 +22,7 @@ export interface Order {
 }
 
 export interface CreateOrderPayload {
-  items: { product_id: number; quantity: number }[];
+  items: { product_id: number; variant_id?: number; quantity: number; customization_text?: string }[];
   shipping_address: string;
   notes?: string;
   idempotency_key: string;
