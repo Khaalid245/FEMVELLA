@@ -66,6 +66,7 @@ class ProductSerializer(serializers.ModelSerializer):
     discount_percent = serializers.SerializerMethodField()
     total_stock = serializers.ReadOnlyField()
     upload_image = serializers.ImageField(write_only=True, required=False)
+    variants_data = serializers.CharField(write_only=True, required=False)
 
     class Meta:
         model = Product
@@ -74,7 +75,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "price", "sale_price", "discount_percent",
             "stock", "total_stock",
             "is_active", "is_featured", "is_new", "is_bestseller", "is_customizable",
-            "upload_image", "images", "colors", "sizes", "variants",
+            "upload_image", "images", "colors", "sizes", "variants", "variants_data",
             "created_at", "updated_at",
         )
 
@@ -84,17 +85,50 @@ class ProductSerializer(serializers.ModelSerializer):
             return round(discount)
         return None
 
+    def _save_variants(self, product, variants_json):
+        import json
+        try:
+            variants = json.loads(variants_json)
+        except (ValueError, TypeError):
+            return
+        incoming_ids = {int(v["id"]) for v in variants if v.get("id")}
+        product.variants.exclude(pk__in=incoming_ids).delete()
+        for v in variants:
+            size = v.get("size", "").strip()
+            if not size:
+                continue
+            defaults = {
+                "stock": int(v.get("stock") or 0),
+                "color": (v.get("color") or "").strip(),
+                "price_override": v.get("price_override") or None,
+            }
+            if v.get("id"):
+                ProductVariant.objects.filter(pk=int(v["id"]), product=product).update(**defaults)
+            else:
+                ProductVariant.objects.update_or_create(
+                    product=product,
+                    size=size,
+                    color=defaults["color"],
+                    defaults={"stock": defaults["stock"], "price_override": defaults["price_override"]},
+                )
+
     def create(self, validated_data):
         image = validated_data.pop("upload_image", None)
+        variants_json = validated_data.pop("variants_data", None)
         product = super().create(validated_data)
         if image:
             ProductImage.objects.create(product=product, image=image, is_primary=True)
+        if variants_json:
+            self._save_variants(product, variants_json)
         return product
 
     def update(self, instance, validated_data):
         image = validated_data.pop("upload_image", None)
+        variants_json = validated_data.pop("variants_data", None)
         product = super().update(instance, validated_data)
         if image:
             ProductImage.objects.filter(product=product, is_primary=True).delete()
             ProductImage.objects.create(product=product, image=image, is_primary=True)
+        if variants_json:
+            self._save_variants(product, variants_json)
         return product

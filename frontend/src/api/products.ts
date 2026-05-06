@@ -1,5 +1,18 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "./client";
+
+interface ColorOption {
+  id: number;
+  name: string;
+  hex_code: string;
+}
+
+interface ProductImage {
+  id: number;
+  image: string;
+  alt_text?: string;
+  is_primary: boolean;
+}
 
 export interface ProductVariant {
   id: number;
@@ -25,7 +38,7 @@ export interface Product {
   is_new: boolean;
   is_bestseller: boolean;
   is_customizable: boolean;
-  images: { id: number; image: string; is_primary: boolean }[];
+  images: { id: number; image: string; alt_text?: string; is_primary: boolean }[];
   colors: { id: number; name: string; hex_code: string }[];
   sizes: { id: number; size: string; in_stock: boolean }[];
   variants: ProductVariant[];
@@ -46,12 +59,16 @@ export const useProducts = (params?: Record<string, string>) =>
     staleTime: 1000 * 60 * 5,
   });
 
-export const useProduct = (slug: string) =>
-  useQuery({
+export const useProduct = (slug: string) => {
+  const isValidSlug = !!slug && slug !== 'undefined' && slug !== 'null';
+  return useQuery({
     queryKey: ["product", slug],
     queryFn: () => api.get<Product>(`/products/${slug}/`).then((r) => r.data),
-    enabled: !!slug,
+    enabled: isValidSlug,
+    retry: false,
+    staleTime: 1000 * 60 * 5,
   });
+};
 
 // Tab-specific hooks — each has its own stable query key for independent caching
 export const useNewArrivals = () =>

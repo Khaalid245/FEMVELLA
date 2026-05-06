@@ -1,6 +1,7 @@
 import { useState, useRef, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useAdminProducts, useCreateProduct, useCategories } from "@/api/admin";
+import AdminImageManager from "@/components/AdminImageManager";
 
 // ─────────────────────────────────────────────
 // Add Product Modal
@@ -24,6 +25,14 @@ function AddProductModal({ onClose }: { onClose: () => void }) {
     color: string;
     stock: number;
     price_override: string;
+  }>>([]);
+
+  const [images, setImages] = useState<Array<{
+    id?: number;
+    image: string | File;
+    alt_text: string;
+    sort_order: number;
+    is_primary?: boolean;
   }>>([]);
 
   const set = (k: string, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }));
@@ -63,9 +72,28 @@ function AddProductModal({ onClose }: { onClose: () => void }) {
     fd.append("is_customizable", form.is_customizable ? "true" : "false");
     
     // Add variants data
-    fd.append("variants", JSON.stringify(variants));
-
-    // Image file
+    fd.append("variants_data", JSON.stringify(variants));
+    
+    // Add images data
+    const imageFiles: File[] = [];
+    const imageData = images.map((img, index) => {
+      if (img.image instanceof File) {
+        imageFiles.push(img.image);
+        return {
+          alt_text: img.alt_text,
+          sort_order: index,
+          is_primary: img.is_primary || index === 0,
+          file_index: imageFiles.length - 1
+        };
+      }
+      return null;
+    }).filter(Boolean);
+    
+    fd.append("images_data", JSON.stringify(imageData));
+    imageFiles.forEach((file, index) => {
+      fd.append(`image_${index}`, file);
+    });
+    
     const file = fileRef.current?.files?.[0];
     if (file) fd.append("upload_image", file);
 
@@ -159,24 +187,13 @@ function AddProductModal({ onClose }: { onClose: () => void }) {
             <textarea value={form.description} onChange={(e) => set("description", e.target.value)} rows={3} style={{ ...inputStyle, resize: "vertical" }} placeholder="Product description..." />
           </div>
 
-          {/* Image */}
+          {/* Image Management */}
           <div>
-            <label style={labelStyle}>Product Image</label>
-            <input
-              ref={fileRef} type="file" accept="image/*"
-              style={{ ...inputStyle, padding: "6px 12px" }}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) setPreview(URL.createObjectURL(file));
-                else setPreview(null);
-              }}
+            <AdminImageManager
+              images={images}
+              onImagesChange={setImages}
+              maxImages={5}
             />
-            {preview && (
-              <img
-                src={preview} alt="Preview"
-                style={{ marginTop: "8px", width: "80px", height: "100px", objectFit: "cover", borderRadius: "3px", border: "1px solid #DDD5CE" }}
-              />
-            )}
           </div>
 
           {/* Customizable toggle */}

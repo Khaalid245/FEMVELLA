@@ -7,13 +7,16 @@ import Button from "./Button";
 export default function ProductCard({ product }: { product: Product }) {
   const addItem = useCartStore((s) => s.addItem);
   const primaryImage = product.images.find((i) => i.is_primary) ?? product.images[0];
+  const productPath = product.slug && !/^\d+$/.test(product.slug)
+    ? `/products/${product.slug}`
+    : `/products/${product.id}`;
 
   return (
     <motion.div
       whileHover={{ y: -4 }}
       className="group bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
     >
-      <Link to={`/products/${product.slug}`}>
+      <Link to={productPath}>
         <div className="aspect-[3/4] bg-gray-50 overflow-hidden">
           {primaryImage ? (
             <img
@@ -54,9 +57,9 @@ export default function ProductCard({ product }: { product: Product }) {
               slug: product.slug,
             })
           }
-          disabled={product.stock === 0}
+          disabled={product.total_stock === 0}
         >
-          {product.stock === 0 ? "Out of Stock" : "Add to Cart"}
+          {product.total_stock === 0 ? "Out of Stock" : "Add to Cart"}
         </Button>
       </div>
     </motion.div>

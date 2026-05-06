@@ -70,10 +70,8 @@ class ProductSize(models.Model):
 
 class ProductVariant(models.Model):
     """Per-size (and optionally per-color) stock tracking."""
-    SIZE_CHOICES = [(s, s) for s in ("XS", "S", "M", "L", "XL", "XXL", "One Size")]
-
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="variants")
-    size = models.CharField(max_length=10, choices=SIZE_CHOICES)
+    size = models.CharField(max_length=50)
     color = models.CharField(max_length=50, blank=True, default="")
     stock = models.PositiveIntegerField(default=0)
     price_override = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)

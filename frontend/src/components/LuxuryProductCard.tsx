@@ -17,7 +17,11 @@ function LuxuryProductCard({ product }: Props) {
     product.images.find((i) => i.is_primary) ?? product.images[0];
 
   const isOnSale = !!product.sale_price;
-  const isOutOfStock = product.stock === 0;
+  const isOutOfStock = product.total_stock === 0;
+  // Guard: if slug is missing or looks like a bare number, use id-based path
+  const productPath = product.slug && !/^\d+$/.test(product.slug)
+    ? `/products/${product.slug}`
+    : `/products/${product.id}`;
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -43,7 +47,7 @@ function LuxuryProductCard({ product }: Props) {
       style={{ boxShadow: "0 1px 3px rgba(44,36,32,0.06)" }}
     >
       {/* ── Image ── */}
-      <Link to={`/products/${product.slug}`} className="relative block aspect-[3/4] overflow-hidden bg-[#F5F0EB]">
+      <Link to={productPath} className="relative block aspect-[3/4] overflow-hidden bg-[#F5F0EB]">
         {primaryImage ? (
           <img
             src={primaryImage.image}
@@ -103,7 +107,7 @@ function LuxuryProductCard({ product }: Props) {
           {product.category?.name}
         </p>
 
-        <Link to={`/products/${product.slug}`}>
+        <Link to={productPath}>
           <h3
             className="text-sm font-medium truncate hover:underline underline-offset-2"
             style={{

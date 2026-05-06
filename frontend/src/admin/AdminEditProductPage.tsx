@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/api/client";
 import { useCategories } from "@/api/admin";
 import { useToastStore } from "@/store/toastStore";
+import AdminImageManager from "@/components/AdminImageManager";
 
 export default function AdminEditProductPage() {
   const { id } = useParams<{ id: string }>();
@@ -40,6 +41,14 @@ export default function AdminEditProductPage() {
     price_override: string;
   }>>([]);
 
+  const [images, setImages] = useState<Array<{
+    id?: number;
+    image: string | File;
+    alt_text: string;
+    sort_order: number;
+    is_primary?: boolean;
+  }>>([]);
+
   // Populate form once product loads
   useEffect(() => {
     if (product) {
@@ -63,6 +72,14 @@ export default function AdminEditProductPage() {
         color: v.color || "",
         stock: v.stock,
         price_override: v.price_override || "",
+      })) || []);
+      
+      setImages(product.images?.map((img: any, index: number) => ({
+        id: img.id,
+        image: img.image,
+        alt_text: img.alt_text || "",
+        sort_order: img.sort_order || index,
+        is_primary: img.is_primary || false,
       })) || []);
     }
   }, [product]);
@@ -114,7 +131,36 @@ export default function AdminEditProductPage() {
     fd.append("is_customizable", form.is_customizable ? "true" : "false");
     
     // Add variants data
-    fd.append("variants", JSON.stringify(variants));
+    fd.append("variants_data", JSON.stringify(variants));
+    
+    // Add images data
+    const imageFiles: File[] = [];
+    const imageData = images.map((img, index) => {
+      if (img.image instanceof File) {
+        imageFiles.push(img.image);
+        return {
+          id: img.id,
+          alt_text: img.alt_text,
+          sort_order: index,
+          is_primary: img.is_primary || index === 0,
+          file_index: imageFiles.length - 1
+        };
+      } else {
+        return {
+          id: img.id,
+          image: img.image,
+          alt_text: img.alt_text,
+          sort_order: index,
+          is_primary: img.is_primary || index === 0
+        };
+      }
+    });
+    
+    fd.append("images_data", JSON.stringify(imageData));
+    imageFiles.forEach((file, index) => {
+      fd.append(`image_${index}`, file);
+    });
+    
     const file = fileRef.current?.files?.[0];
     if (file) fd.append("upload_image", file);
     updateProduct(fd);
@@ -165,28 +211,12 @@ export default function AdminEditProductPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Current image */}
-        {(preview || primaryImage) && (
-          <div>
-            <label style={labelStyle}>Current Image</label>
-            <img
-              src={preview ?? primaryImage?.image}
-              alt="Product"
-              style={{ width: "100px", height: "130px", objectFit: "cover", borderRadius: "3px", border: "1px solid #DDD5CE" }}
-            />
-          </div>
-        )}
-
-        {/* Replace image */}
+        {/* Image Management */}
         <div>
-          <label style={labelStyle}>Replace Image</label>
-          <input
-            ref={fileRef} type="file" accept="image/*"
-            style={{ ...inputStyle, padding: "6px 12px" }}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              setPreview(file ? URL.createObjectURL(file) : null);
-            }}
+          <AdminImageManager
+            images={images}
+            onImagesChange={setImages}
+            maxImages={10}
           />
         </div>
 

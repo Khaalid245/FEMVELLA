@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect } from "react";
 import ToastContainer from "@/components/ToastContainer";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -55,6 +55,9 @@ export default function App() {
         <Route path="/admin/orders" element={<AdminRoute><AdminLayout><AdminOrdersPage /></AdminLayout></AdminRoute>} />
         <Route path="/admin/products" element={<AdminRoute><AdminLayout><AdminProductsPage /></AdminLayout></AdminRoute>} />
         <Route path="/admin/products/:id/edit" element={<AdminRoute><AdminLayout><AdminEditProductPage /></AdminLayout></AdminRoute>} />
+        
+        {/* Catch-all route - redirect to products page */}
+        <Route path="*" element={<Navigate to="/products" replace />} />
       </Routes>
     </BrowserRouter>
   );

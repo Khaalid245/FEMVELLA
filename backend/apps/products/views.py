@@ -31,7 +31,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         return generics.get_object_or_404(qs, slug=lookup)
 
     def get_queryset(self):
-        qs = Product.objects.select_related("category").prefetch_related("images", "colors", "sizes")
+        qs = Product.objects.select_related("category").prefetch_related("images", "colors", "sizes", "variants")
         if self.request.user.is_staff:
             return qs.all()
         return qs.filter(is_active=True)
