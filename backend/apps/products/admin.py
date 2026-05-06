@@ -4,7 +4,17 @@ from .models import Category, Product, ProductImage, ProductColor, ProductSize, 
 
 class ProductImageInline(admin.TabularInline):
     model = ProductImage
-    extra = 1
+    extra = 3  # Show 3 empty forms for adding images
+    max_num = 10  # Allow up to 10 images per product
+    fields = ('image', 'alt_text', 'is_primary', 'sort_order')
+    verbose_name = "Product Image"
+    verbose_name_plural = "Product Images"
+    
+    def get_extra(self, request, obj=None, **kwargs):
+        # If editing existing product, show fewer extra forms
+        if obj and obj.images.exists():
+            return 1
+        return 3
 
 
 class ProductColorInline(admin.TabularInline):

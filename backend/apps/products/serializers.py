@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.db import models
 from .models import Category, Product, ProductImage, ProductColor, ProductSize, ProductVariant
 
 
@@ -7,7 +8,7 @@ class ProductImageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ProductImage
-        fields = ("id", "image", "is_primary")
+        fields = ("id", "image", "alt_text", "is_primary", "sort_order")
 
     def get_image(self, obj):
         request = self.context.get("request")
@@ -66,6 +67,9 @@ class ProductSerializer(serializers.ModelSerializer):
     discount_percent = serializers.SerializerMethodField()
     total_stock = serializers.ReadOnlyField()
     upload_image = serializers.ImageField(write_only=True, required=False)
+    upload_images = serializers.ListField(
+        child=serializers.ImageField(), write_only=True, required=False
+    )
     variants_data = serializers.CharField(write_only=True, required=False)
 
     class Meta:
@@ -75,7 +79,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "price", "sale_price", "discount_percent",
             "stock", "total_stock",
             "is_active", "is_featured", "is_new", "is_bestseller", "is_customizable",
-            "upload_image", "images", "colors", "sizes", "variants", "variants_data",
+            "upload_image", "upload_images", "images", "colors", "sizes", "variants", "variants_data",
             "created_at", "updated_at",
         )
 
@@ -114,21 +118,68 @@ class ProductSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         image = validated_data.pop("upload_image", None)
+        images = validated_data.pop("upload_images", [])
         variants_json = validated_data.pop("variants_data", None)
         product = super().create(validated_data)
+        
+        # Handle single image upload (backward compatibility)
         if image:
-            ProductImage.objects.create(product=product, image=image, is_primary=True)
+            ProductImage.objects.create(product=product, image=image, is_primary=True, sort_order=0)
+        
+        # Handle multiple image uploads
+        for i, img in enumerate(images):
+            is_primary = (i == 0 and not image)  # First image is primary if no single image
+            sort_order = i + (1 if image else 0)  # Offset if single image exists
+            ProductImage.objects.create(
+                product=product, 
+                image=img, 
+                is_primary=is_primary, 
+                sort_order=sort_order
+            )
+        
         if variants_json:
             self._save_variants(product, variants_json)
         return product
 
     def update(self, instance, validated_data):
+        print(f"ProductSerializer.update called with data: {list(validated_data.keys())}")
+        
         image = validated_data.pop("upload_image", None)
+        images = validated_data.pop("upload_images", [])
         variants_json = validated_data.pop("variants_data", None)
+        
+        print(f"Image data: upload_image={image}, upload_images={len(images)} files")
+        
         product = super().update(instance, validated_data)
+        
+        # Handle single image upload (replace primary)
         if image:
+            print(f"Processing single image upload: {image}")
             ProductImage.objects.filter(product=product, is_primary=True).delete()
-            ProductImage.objects.create(product=product, image=image, is_primary=True)
+            ProductImage.objects.create(product=product, image=image, is_primary=True, sort_order=0)
+        
+        # Handle multiple image uploads (add to existing)
+        if images:
+            print(f"Processing {len(images)} image uploads")
+            # Get the highest sort_order to append new images
+            max_sort_order = ProductImage.objects.filter(product=product).aggregate(
+                max_order=models.Max('sort_order')
+            )['max_order'] or -1
+            
+            for i, img in enumerate(images):
+                sort_order = max_sort_order + i + 1
+                # Set as primary if no existing primary image
+                is_primary = not ProductImage.objects.filter(product=product, is_primary=True).exists() and i == 0
+                print(f"Creating image {i+1}: sort_order={sort_order}, is_primary={is_primary}")
+                ProductImage.objects.create(
+                    product=product, 
+                    image=img, 
+                    is_primary=is_primary, 
+                    sort_order=sort_order
+                )
+        
         if variants_json:
             self._save_variants(product, variants_json)
+        
+        print(f"Update completed. Product now has {product.images.count()} images")
         return product

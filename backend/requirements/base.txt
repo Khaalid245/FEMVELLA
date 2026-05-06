@@ -10,3 +10,9 @@ Pillow==11.1.0
 djangorestframework-simplejwt==5.3.1
 django-filter==24.3
 stripe==11.3.0
+
+# Security packages
+django-csp==3.8
+django-ratelimit==4.1.0
+django-axes==6.5.1
+django-security==1.1.6

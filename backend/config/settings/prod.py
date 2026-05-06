@@ -1,7 +1,9 @@
 from .base import *  # noqa
+from .security import *  # noqa
+from .logging import *  # noqa
 import sentry_sdk
 
-DEBUG = False
+DEBUG = env.bool("DEBUG", default=False)
 
 SECURE_HSTS_SECONDS = 31536000
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True

@@ -42,7 +42,27 @@ class Product(TimeStampedModel):
 class ProductImage(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="images")
     image = models.ImageField(upload_to="products/")
+    alt_text = models.CharField(max_length=255, blank=True, help_text="Alternative text for accessibility")
     is_primary = models.BooleanField(default=False)
+    sort_order = models.IntegerField(default=0)
+    
+    class Meta:
+        ordering = ['sort_order', 'id']
+    
+    def __str__(self):
+        return f"{self.product.name} - Image {self.id}"
+    
+    def save(self, *args, **kwargs):
+        # Auto-generate alt_text if not provided
+        if not self.alt_text:
+            self.alt_text = f"{self.product.name} product image"
+        
+        # Debug logging
+        print(f"Saving ProductImage: product={self.product_id}, image={self.image}, is_primary={self.is_primary}, sort_order={self.sort_order}")
+        
+        super().save(*args, **kwargs)
+        
+        print(f"ProductImage saved successfully: id={self.id}")
 
 
 class ProductColor(models.Model):

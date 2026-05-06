@@ -1,6 +1,8 @@
 from .base import *  # noqa
+from .security import *  # noqa
+from .logging import *  # noqa
 
-DEBUG = True
+DEBUG = env.bool("DEBUG", default=True)
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 

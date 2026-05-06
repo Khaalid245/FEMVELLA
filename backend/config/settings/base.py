@@ -23,6 +23,9 @@ THIRD_PARTY_APPS = [
     "rest_framework_simplejwt",
     "corsheaders",
     "django_filters",
+    "csp",
+    "django_ratelimit",
+    "axes",
 ]
 
 LOCAL_APPS = [
@@ -32,6 +35,7 @@ LOCAL_APPS = [
     "apps.payments",
     "apps.blog",
     "apps.analytics",
+    "apps.audit",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -39,6 +43,9 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
+    "csp.middleware.CSPMiddleware",
+    "axes.middleware.AxesMiddleware",
+    "apps.audit.middleware.AuditMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",

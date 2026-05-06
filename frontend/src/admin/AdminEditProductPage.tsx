@@ -133,33 +133,17 @@ export default function AdminEditProductPage() {
     // Add variants data
     fd.append("variants_data", JSON.stringify(variants));
     
-    // Add images data
-    const imageFiles: File[] = [];
-    const imageData = images.map((img, index) => {
-      if (img.image instanceof File) {
-        imageFiles.push(img.image);
-        return {
-          id: img.id,
-          alt_text: img.alt_text,
-          sort_order: index,
-          is_primary: img.is_primary || index === 0,
-          file_index: imageFiles.length - 1
-        };
-      } else {
-        return {
-          id: img.id,
-          image: img.image,
-          alt_text: img.alt_text,
-          sort_order: index,
-          is_primary: img.is_primary || index === 0
-        };
-      }
+    // Add images - send new image files to upload_images field
+    const newImageFiles = images
+      .filter(img => img.image instanceof File)
+      .map(img => img.image as File);
+    
+    // Add each new image file to upload_images
+    newImageFiles.forEach(file => {
+      fd.append('upload_images', file);
     });
     
-    fd.append("images_data", JSON.stringify(imageData));
-    imageFiles.forEach((file, index) => {
-      fd.append(`image_${index}`, file);
-    });
+    console.log(`Sending ${newImageFiles.length} new image files to backend`);
     
     const file = fileRef.current?.files?.[0];
     if (file) fd.append("upload_image", file);
