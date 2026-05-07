@@ -36,6 +36,11 @@ class Product(TimeStampedModel):
     is_new = models.BooleanField(default=False)
     is_bestseller = models.BooleanField(default=False)
     is_customizable = models.BooleanField(default=False)
+    
+    # Review & Rating fields
+    average_rating = models.DecimalField(max_digits=3, decimal_places=2, default=0.00)
+    total_reviews = models.PositiveIntegerField(default=0)
+    rating_distribution = models.JSONField(default=dict, help_text="Distribution of ratings 1-5")
 
     def __str__(self):
         return self.name

@@ -16,6 +16,11 @@ urlpatterns = [
     path("api/blog/", include("apps.blog.urls")),
     path("api/analytics/", include("apps.analytics.urls")),
     path("api/contact/", include("apps.contact.urls")),
+    path("api/shipping/", include("apps.shipping.urls")),
+    path("api/wishlist/", include("apps.wishlist.urls")),
+    path("api/reviews/", include("apps.reviews.urls")),
+    # SEO URLs (at root level)
+    path("", include("apps.seo.urls")),
     # path("api/audit/", include("apps.audit.urls")),  # Temporarily disabled
     # path("api/search/", include("apps.search.urls")),  # Temporarily disabled
 ]

@@ -1,0 +1,11 @@
+from django.apps import AppConfig
+
+
+class EmailsConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'apps.emails'
+    verbose_name = 'Email Management'
+
+    def ready(self):
+        # Import signals
+        from . import signals
