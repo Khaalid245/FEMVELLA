@@ -30,11 +30,28 @@ export interface AdminStats {
 
 export interface AdminOrder {
   id: number;
+  order_number: string;
   user_email: string;
   status: string;
   total_price: string;
+  refunded_amount: string;
+  balance_due: string;
   shipping_address: string;
-  items: { id: number; product_name: string; quantity: number; unit_price: string }[];
+  tracking_number: string;
+  carrier: string;
+  tracking_url: string;
+  shipped_at: string | null;
+  delivered_at: string | null;
+  items: {
+    id: number;
+    product_name: string;
+    quantity: number;
+    unit_price: string;
+    fulfilled_quantity: number;
+    refunded_quantity: number;
+    size: string;
+    color: string;
+  }[];
   created_at: string;
 }
 
@@ -43,7 +60,50 @@ export interface OrderHistoryEntry {
   old_status: string;
   new_status: string;
   changed_by_email: string | null;
+  note: string;
   timestamp: string;
+}
+
+export interface Refund {
+  id: number;
+  order: number;
+  amount: string;
+  reason: string;
+  status: string;
+  requested_by_email: string | null;
+  processed_by_email: string | null;
+  admin_note: string;
+  stripe_refund_id: string;
+  processed_at: string | null;
+  created_at: string;
+}
+
+export interface ReturnRequest {
+  id: number;
+  order: number;
+  status: string;
+  reason: string;
+  description: string;
+  items: { order_item_id: number; quantity: number }[];
+  requested_by_email: string | null;
+  admin_note: string;
+  return_tracking_number: string;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+export interface ExchangeRequest {
+  id: number;
+  order: number;
+  status: string;
+  reason: string;
+  return_items: { order_item_id: number; quantity: number }[];
+  exchange_items: { product_id: number; variant_id?: number; quantity: number }[];
+  requested_by_email: string | null;
+  admin_note: string;
+  new_order: number | null;
+  reviewed_at: string | null;
+  created_at: string;
 }
 
 export interface OrdersPage {
@@ -165,6 +225,145 @@ export const useOrderHistory = (orderId: number | null) =>
     enabled: orderId !== null,
     staleTime: 0,
   });
+
+// ─────────────────────────────────────────────
+// Refunds
+// ─────────────────────────────────────────────
+export const useOrderRefunds = (orderId: number | null) =>
+  useQuery({
+    queryKey: ["order-refunds", orderId],
+    queryFn: () =>
+      api.get<Refund[]>(`/orders/${orderId}/refunds/`).then((r) => r.data),
+    enabled: orderId !== null,
+    staleTime: 0,
+  });
+
+export const useRequestRefund = (orderId: number) => {
+  const qc = useQueryClient();
+  const toast = useToastStore((s) => s.add);
+  return useMutation({
+    mutationFn: (data: { amount: string; reason: string }) =>
+      api.post(`/orders/${orderId}/refunds/request/`, data).then((r) => r.data),
+    onSuccess: () => {
+      toast("Refund request submitted.");
+      qc.invalidateQueries({ queryKey: ["order-refunds", orderId] });
+    },
+    onError: () => toast("Failed to submit refund request.", "error"),
+  });
+};
+
+export const useReviewRefund = (orderId: number) => {
+  const qc = useQueryClient();
+  const toast = useToastStore((s) => s.add);
+  return useMutation({
+    mutationFn: ({ refundId, approved, admin_note }: { refundId: number; approved: boolean; admin_note?: string }) =>
+      api.post(`/orders/${orderId}/refunds/${refundId}/review/`, { approved, admin_note }).then((r) => r.data),
+    onSuccess: (_, vars) => {
+      toast(vars.approved ? "Refund approved and processed." : "Refund rejected.");
+      qc.invalidateQueries({ queryKey: ["order-refunds", orderId] });
+      qc.invalidateQueries({ queryKey: ["admin-orders"] });
+    },
+    onError: () => toast("Failed to process refund.", "error"),
+  });
+};
+
+// ─────────────────────────────────────────────
+// Returns
+// ─────────────────────────────────────────────
+export const useOrderReturns = (orderId: number | null) =>
+  useQuery({
+    queryKey: ["order-returns", orderId],
+    queryFn: () =>
+      api.get<ReturnRequest[]>(`/orders/${orderId}/returns/`).then((r) => r.data),
+    enabled: orderId !== null,
+    staleTime: 0,
+  });
+
+export const useReviewReturn = (orderId: number) => {
+  const qc = useQueryClient();
+  const toast = useToastStore((s) => s.add);
+  return useMutation({
+    mutationFn: ({ returnId, approved, admin_note }: { returnId: number; approved: boolean; admin_note?: string }) =>
+      api.post(`/orders/${orderId}/returns/${returnId}/review/`, { approved, admin_note }).then((r) => r.data),
+    onSuccess: (_, vars) => {
+      toast(vars.approved ? "Return approved." : "Return rejected.");
+      qc.invalidateQueries({ queryKey: ["order-returns", orderId] });
+    },
+    onError: () => toast("Failed to review return.", "error"),
+  });
+};
+
+// ─────────────────────────────────────────────
+// Exchanges
+// ─────────────────────────────────────────────
+export const useOrderExchanges = (orderId: number | null) =>
+  useQuery({
+    queryKey: ["order-exchanges", orderId],
+    queryFn: () =>
+      api.get<ExchangeRequest[]>(`/orders/${orderId}/exchanges/`).then((r) => r.data),
+    enabled: orderId !== null,
+    staleTime: 0,
+  });
+
+export const useReviewExchange = (orderId: number) => {
+  const qc = useQueryClient();
+  const toast = useToastStore((s) => s.add);
+  return useMutation({
+    mutationFn: ({ exchangeId, approved, admin_note }: { exchangeId: number; approved: boolean; admin_note?: string }) =>
+      api.post(`/orders/${orderId}/exchanges/${exchangeId}/review/`, { approved, admin_note }).then((r) => r.data),
+    onSuccess: (_, vars) => {
+      toast(vars.approved ? "Exchange approved." : "Exchange rejected.");
+      qc.invalidateQueries({ queryKey: ["order-exchanges", orderId] });
+    },
+    onError: () => toast("Failed to review exchange.", "error"),
+  });
+};
+
+// ─────────────────────────────────────────────
+// Fulfillment
+// ─────────────────────────────────────────────
+export const useFulfillOrder = (filters: OrderFilters) => {
+  const qc = useQueryClient();
+  const toast = useToastStore((s) => s.add);
+  return useMutation({
+    mutationFn: ({ orderId, data }: { orderId: number; data: { tracking_number: string; carrier: string; tracking_url?: string } }) =>
+      api.post(`/orders/${orderId}/fulfill/`, data).then((r) => r.data),
+    onSuccess: () => {
+      toast("Order fulfilled with tracking.");
+      qc.invalidateQueries({ queryKey: ["admin-orders", filters] });
+    },
+    onError: () => toast("Fulfillment failed.", "error"),
+  });
+};
+
+export const useAddTracking = (filters: OrderFilters) => {
+  const qc = useQueryClient();
+  const toast = useToastStore((s) => s.add);
+  return useMutation({
+    mutationFn: ({ orderId, data }: { orderId: number; data: { tracking_number: string; carrier: string; tracking_url?: string } }) =>
+      api.patch(`/orders/${orderId}/tracking/`, data).then((r) => r.data),
+    onSuccess: () => {
+      toast("Tracking number saved.");
+      qc.invalidateQueries({ queryKey: ["admin-orders", filters] });
+    },
+    onError: () => toast("Failed to save tracking.", "error"),
+  });
+};
+
+// ─────────────────────────────────────────────
+// Invoice download
+// ─────────────────────────────────────────────
+export const downloadInvoice = async (orderId: number, orderNumber: string) => {
+  const response = await api.get(`/orders/${orderId}/invoice/`, { responseType: "blob" });
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", `femvelle-invoice-${orderNumber}.pdf`);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
 
 // ─────────────────────────────────────────────
 // Products

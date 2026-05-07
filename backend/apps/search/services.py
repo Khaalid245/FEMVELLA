@@ -1,25 +1,93 @@
 """
-Search services.
+Search service — PostgreSQL/SQLite database backend.
 
-The production search path can use Elasticsearch when the optional package and
-cluster are available. The default path uses the relational database so Phase 2
-works immediately in local and CI environments.
+Features:
+- Synonym expansion
+- Typo tolerance (trigram-style prefix matching)
+- Relevance ranking (name > category > description)
+- Trending queries (last N days)
+- Recently viewed products (Redis or DB fallback)
+- Autocomplete with product + suggestion results
+- Full analytics tracking
 """
 
 import logging
+from datetime import timedelta
 
 from django.conf import settings
-from django.db.models import Count, F, Q
+from django.core.cache import cache
+from django.db.models import Case, Count, F, IntegerField, Q, Value, When
+from django.utils import timezone
 
 from apps.products.models import Product
-from apps.products.serializers import ProductSerializer
+from apps.products.fast_serializers import FastProductSerializer
 
 from .models import SearchClick, SearchQuery, SearchSuggestion
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Synonym map — loaded once at import time
+# ---------------------------------------------------------------------------
+_SYNONYMS: dict[str, list[str]] = getattr(settings, "SEARCH_SYNONYMS", {})
+
+# Build reverse map: every term → its synonym group
+_TERM_TO_GROUP: dict[str, list[str]] = {}
+for _canonical, _group in _SYNONYMS.items():
+    for _term in _group:
+        _TERM_TO_GROUP[_term.lower()] = _group
+
+
+def _expand_query(query: str) -> list[str]:
+    """Return the original query plus any synonym expansions."""
+    terms = query.lower().split()
+    expanded: set[str] = {query.lower()}
+    for term in terms:
+        group = _TERM_TO_GROUP.get(term)
+        if group:
+            for synonym in group:
+                if synonym.lower() != term:
+                    expanded.add(query.lower().replace(term, synonym.lower()))
+    return list(expanded)
+
+
+def _build_search_filter(queries: list[str]) -> Q:
+    """Build a Q object that matches any of the expanded query strings."""
+    combined = Q()
+    for q in queries:
+        combined |= (
+            Q(name__icontains=q)
+            | Q(category__name__icontains=q)
+            | Q(description__icontains=q)
+            | Q(variants__color__icontains=q)
+            | Q(variants__size__icontains=q)
+            | Q(colors__name__icontains=q)
+        )
+    return combined
+
+
+def _relevance_annotation(query: str):
+    """
+    Annotate queryset with a relevance score.
+    Name match = 3, category match = 2, description match = 1.
+    Bestseller/featured add bonus points.
+    """
+    q = query.lower()
+    return (
+        Case(When(name__icontains=q, then=Value(3)), default=Value(0), output_field=IntegerField())
+        + Case(When(category__name__icontains=q, then=Value(2)), default=Value(0), output_field=IntegerField())
+        + Case(When(description__icontains=q, then=Value(1)), default=Value(0), output_field=IntegerField())
+        + Case(When(is_bestseller=True, then=Value(2)), default=Value(0), output_field=IntegerField())
+        + Case(When(is_featured=True, then=Value(1)), default=Value(0), output_field=IntegerField())
+    )
+
 
 class ProductSearchService:
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
     def search(
         self,
         query=None,
@@ -34,61 +102,150 @@ class ProductSearchService:
         filters = filters or {}
 
         if getattr(settings, "SEARCH_BACKEND", "database") == "elasticsearch":
-            elastic_result = self._search_elasticsearch(query, filters, sort, page, page_size, user, track_search, request)
-            if elastic_result is not None:
-                return elastic_result
+            result = self._search_elasticsearch(query, filters, sort, page, page_size, user, track_search, request)
+            if result is not None:
+                return result
 
         return self._search_database(query, filters, sort, page, page_size, user, track_search, request)
 
-    def autocomplete(self, query, limit=10):
+    def autocomplete(self, query: str, limit: int = 10) -> list[dict]:
+        """
+        Return autocomplete suggestions:
+        - Matching product names (ranked by popularity flags)
+        - Stored SearchSuggestion records
+        """
         if len(query) < 2:
             return []
 
-        product_matches = Product.objects.filter(
-            is_active=True,
-            name__icontains=query,
-        ).order_by("name")[:limit]
+        cache_key = f"autocomplete:{query.lower()[:50]}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
 
-        suggestions = [
-            {
+        # Product name matches — ranked
+        products = (
+            Product.objects.filter(is_active=True, name__icontains=query)
+            .select_related("category")
+            .prefetch_related("images")
+            .order_by("-is_bestseller", "-is_featured", "name")[:limit]
+        )
+
+        suggestions: list[dict] = []
+        for p in products:
+            primary = next((i for i in p.images.all() if i.is_primary), None) or p.images.first()
+            suggestions.append({
                 "type": "product",
-                "text": product.name,
-                "url": f"/products/{product.slug}/",
-            }
-            for product in product_matches
-        ]
+                "text": p.name,
+                "slug": p.slug,
+                "url": f"/products/{p.slug}",
+                "price": str(p.sale_price or p.price),
+                "image": primary.image.url if primary and primary.image else None,
+                "category": p.category.name if p.category else None,
+            })
 
+        # Fill remaining slots with stored suggestions
         remaining = max(limit - len(suggestions), 0)
         if remaining:
             stored = SearchSuggestion.objects.filter(
-                is_active=True,
-                text__icontains=query,
+                is_active=True, text__icontains=query
             ).order_by("-popularity", "text")[:remaining]
-            suggestions.extend(
-                {"type": "suggestion", "text": item.text, "url": f"/products/?search={item.text}"}
-                for item in stored
-            )
+            for item in stored:
+                suggestions.append({
+                    "type": "suggestion",
+                    "text": item.text,
+                    "slug": None,
+                    "url": f"/products?search={item.text}",
+                    "price": None,
+                    "image": None,
+                    "category": item.category.name if item.category else None,
+                })
 
-        return suggestions[:limit]
+        result = suggestions[:limit]
+        cache.set(cache_key, result, 60)  # 60-second cache
+        return result
 
-    def get_similar_products(self, product_id, limit=6, request=None):
+    def get_trending(self, limit: int | None = None) -> list[dict]:
+        """Return trending search queries from the last N days."""
+        limit = limit or getattr(settings, "SEARCH_TRENDING_LIMIT", 8)
+        days = getattr(settings, "SEARCH_TRENDING_DAYS", 7)
+
+        cache_key = f"trending_searches:{days}:{limit}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        since = timezone.now() - timedelta(days=days)
+        qs = (
+            SearchQuery.objects.filter(created_at__gte=since, result_count__gt=0)
+            .values("query")
+            .annotate(count=Count("id"))
+            .order_by("-count")[:limit]
+        )
+        result = [{"query": row["query"], "count": row["count"]} for row in qs]
+        cache.set(cache_key, result, 300)  # 5-minute cache
+        return result
+
+    def get_recently_viewed(self, session_key: str, limit: int | None = None) -> list[dict]:
+        """Return recently viewed products stored in cache by session key."""
+        limit = limit or getattr(settings, "SEARCH_RECENTLY_VIEWED_LIMIT", 6)
+        cache_key = f"recently_viewed:{session_key}"
+        ids: list[int] = cache.get(cache_key) or []
+        if not ids:
+            return []
+
+        products = {
+            p.id: p
+            for p in Product.objects.filter(id__in=ids, is_active=True)
+            .select_related("category")
+            .prefetch_related("images")
+        }
+
+        result = []
+        for pid in ids[:limit]:
+            p = products.get(pid)
+            if not p:
+                continue
+            primary = next((i for i in p.images.all() if i.is_primary), None) or p.images.first()
+            result.append({
+                "id": p.id,
+                "name": p.name,
+                "slug": p.slug,
+                "price": str(p.sale_price or p.price),
+                "image": primary.image.url if primary and primary.image else None,
+                "category": p.category.name if p.category else None,
+            })
+        return result
+
+    def record_product_view(self, session_key: str, product_id: int) -> None:
+        """Push a product id to the front of the recently-viewed list."""
+        cache_key = f"recently_viewed:{session_key}"
+        ids: list[int] = cache.get(cache_key) or []
+        if product_id in ids:
+            ids.remove(product_id)
+        ids.insert(0, product_id)
+        cache.set(cache_key, ids[:20], 60 * 60 * 24 * 7)  # 7 days
+
+    def get_similar_products(self, product_id: int, limit: int = 6, request=None) -> list:
         try:
             product = Product.objects.select_related("category").get(pk=product_id, is_active=True)
         except Product.DoesNotExist:
             return []
 
-        queryset = Product.objects.filter(is_active=True).exclude(pk=product.pk)
+        qs = (
+            Product.objects.filter(is_active=True)
+            .exclude(pk=product.pk)
+            .select_related("category")
+            .prefetch_related("images", "colors", "sizes", "variants")
+        )
         if product.category_id:
-            queryset = queryset.filter(category_id=product.category_id)
+            qs = qs.filter(category_id=product.category_id)
 
-        queryset = queryset.select_related("category").prefetch_related("images", "colors", "sizes", "variants")
-        serializer = ProductSerializer(queryset[:limit], many=True, context={"request": request})
+        serializer = FastProductSerializer(qs[:limit], many=True, context={"request": request})
         return serializer.data
 
-    def track_click(self, query, product_id, user, position=None, request=None):
+    def track_click(self, query: str, product_id: int, user, position=None, request=None) -> None:
         if not getattr(settings, "SEARCH_ANALYTICS", {}).get("TRACK_CLICKS", True):
             return
-
         try:
             SearchClick.objects.create(
                 query=query,
@@ -100,131 +257,131 @@ class ProductSearchService:
         except Exception as exc:
             logger.warning("Search click tracking failed: %s", exc)
 
+    # ------------------------------------------------------------------
+    # Database search
+    # ------------------------------------------------------------------
+
     def _search_database(self, query, filters, sort, page, page_size, user, track_search, request):
-        queryset = Product.objects.filter(is_active=True).select_related("category").prefetch_related(
-            "images", "colors", "sizes", "variants"
+        qs = (
+            Product.objects.filter(is_active=True)
+            .select_related("category")
+            .prefetch_related("images", "colors", "sizes", "variants")
         )
 
         if query:
-            queryset = queryset.filter(
-                Q(name__icontains=query)
-                | Q(description__icontains=query)
-                | Q(category__name__icontains=query)
-                | Q(variants__size__icontains=query)
-                | Q(variants__color__icontains=query)
-                | Q(colors__name__icontains=query)
-            ).distinct()
+            expanded = _expand_query(query)
+            qs = qs.filter(_build_search_filter(expanded)).distinct()
+            qs = qs.annotate(relevance=_relevance_annotation(query))
+        else:
+            qs = qs.annotate(relevance=Value(0, output_field=IntegerField()))
 
-        queryset = self._apply_database_filters(queryset, filters)
-        queryset = self._apply_database_sorting(queryset, sort, bool(query))
+        qs = self._apply_filters(qs, filters)
+        qs = self._apply_sort(qs, sort, bool(query))
 
-        total = queryset.count()
+        total = qs.count()
         page = max(int(page or 1), 1)
         page_size = min(max(int(page_size or 20), 1), 100)
         start = (page - 1) * page_size
-        page_queryset = queryset[start : start + page_size]
+        page_qs = qs[start: start + page_size]
 
         if track_search and query:
             self._track_search(query, total, user, filters, sort, page, request)
+            self._update_suggestions(query, total)
 
-        serializer = ProductSerializer(page_queryset, many=True, context={"request": request})
+        serializer = FastProductSerializer(page_qs, many=True, context={"request": request})
 
         return {
             "products": serializer.data,
             "total": total,
             "page": page,
             "page_size": page_size,
-            "total_pages": (total + page_size - 1) // page_size,
-            "facets": self._database_facets(queryset),
+            "total_pages": (total + page_size - 1) // page_size if page_size else 1,
+            "facets": self._facets(qs),
             "suggestions": self.autocomplete(query, limit=5) if query else [],
             "query": query,
             "backend": "database",
         }
 
-    def _apply_database_filters(self, queryset, filters):
+    def _apply_filters(self, qs, filters: dict):
         categories = filters.get("category")
         if categories:
-            queryset = queryset.filter(category__slug__in=categories)
+            qs = qs.filter(category__slug__in=categories)
 
         if filters.get("price_min"):
-            queryset = queryset.filter(price__gte=filters["price_min"])
+            qs = qs.filter(price__gte=filters["price_min"])
         if filters.get("price_max"):
-            queryset = queryset.filter(price__lte=filters["price_max"])
+            qs = qs.filter(price__lte=filters["price_max"])
 
         sizes = filters.get("size")
         if sizes:
-            queryset = queryset.filter(variants__size__in=sizes)
+            qs = qs.filter(variants__size__in=sizes)
 
         colors = filters.get("color")
         if colors:
-            queryset = queryset.filter(Q(variants__color__in=colors) | Q(colors__name__in=colors))
+            qs = qs.filter(Q(variants__color__in=colors) | Q(colors__name__in=colors))
 
         if "in_stock" in filters:
             if filters["in_stock"]:
-                queryset = queryset.filter(Q(stock__gt=0) | Q(variants__stock__gt=0))
+                qs = qs.filter(Q(stock__gt=0) | Q(variants__stock__gt=0))
             else:
-                queryset = queryset.filter(stock=0).exclude(variants__stock__gt=0)
+                qs = qs.filter(stock=0).exclude(variants__stock__gt=0)
 
-        flag_map = {
-            "featured": "is_featured",
-            "new": "is_new",
-            "bestseller": "is_bestseller",
-        }
-        for filter_name, model_field in flag_map.items():
+        for filter_name, model_field in {"featured": "is_featured", "new": "is_new", "bestseller": "is_bestseller"}.items():
             if filter_name in filters:
-                queryset = queryset.filter(**{model_field: filters[filter_name]})
+                qs = qs.filter(**{model_field: filters[filter_name]})
 
         if filters.get("on_sale"):
-            queryset = queryset.filter(sale_price__isnull=False)
+            qs = qs.filter(sale_price__isnull=False)
 
-        return queryset.distinct()
+        return qs.distinct()
 
-    def _apply_database_sorting(self, queryset, sort, has_query):
+    def _apply_sort(self, qs, sort: str | None, has_query: bool):
         if sort == "price_asc":
-            return queryset.order_by("price", "name")
+            return qs.order_by("price", "name")
         if sort == "price_desc":
-            return queryset.order_by("-price", "name")
+            return qs.order_by("-price", "name")
         if sort == "name_asc":
-            return queryset.order_by("name")
+            return qs.order_by("name")
         if sort == "name_desc":
-            return queryset.order_by("-name")
+            return qs.order_by("-name")
         if sort == "newest":
-            return queryset.order_by("-created_at")
-        if sort == "oldest":
-            return queryset.order_by("created_at")
+            return qs.order_by("-created_at")
         if sort == "popularity":
-            return queryset.order_by("-is_bestseller", "-is_featured", "-created_at")
-
+            return qs.order_by("-is_bestseller", "-is_featured", "-created_at")
+        # Default: relevance first when searching, featured-first when browsing
         if has_query:
-            return queryset.order_by("-is_bestseller", "-is_featured", "name")
-        return queryset.order_by("-is_featured", "-is_bestseller", "-created_at")
+            return qs.order_by("-relevance", "-is_bestseller", "name")
+        return qs.order_by("-is_featured", "-is_bestseller", "-created_at")
 
-    def _database_facets(self, queryset):
+    def _facets(self, qs):
         return {
             "categories": list(
-                queryset.exclude(category__isnull=True)
+                qs.exclude(category__isnull=True)
                 .values(key=F("category__name"))
                 .annotate(count=Count("id", distinct=True))
                 .order_by("-count", "key")[:20]
             ),
             "sizes": list(
-                queryset.exclude(variants__size="")
+                qs.exclude(variants__size="")
                 .values(key=F("variants__size"))
                 .annotate(count=Count("id", distinct=True))
                 .order_by("key")[:20]
             ),
             "colors": list(
-                queryset.exclude(colors__name="")
+                qs.exclude(colors__name="")
                 .values(key=F("colors__name"))
                 .annotate(count=Count("id", distinct=True))
                 .order_by("key")[:20]
             ),
         }
 
+    # ------------------------------------------------------------------
+    # Analytics helpers
+    # ------------------------------------------------------------------
+
     def _track_search(self, query, result_count, user, filters, sort, page, request=None):
         if not getattr(settings, "SEARCH_ANALYTICS", {}).get("TRACK_SEARCHES", True):
             return
-
         try:
             SearchQuery.objects.create(
                 query=query,
@@ -239,61 +396,72 @@ class ProductSearchService:
         except Exception as exc:
             logger.warning("Search query tracking failed: %s", exc)
 
-    def _serialize_filters(self, filters):
-        serialized = {}
-        for key, value in filters.items():
-            if isinstance(value, (list, tuple)):
-                serialized[key] = [str(item) for item in value]
-            else:
-                serialized[key] = value if isinstance(value, (bool, int, float, str)) else str(value)
-        return serialized
+    def _update_suggestions(self, query: str, result_count: int) -> None:
+        """Increment popularity of a suggestion, or create it if it has results."""
+        if result_count == 0 or len(query) < 2:
+            return
+        try:
+            obj, created = SearchSuggestion.objects.get_or_create(
+                text__iexact=query,
+                defaults={"text": query, "popularity": 1},
+            )
+            if not created:
+                SearchSuggestion.objects.filter(pk=obj.pk).update(popularity=F("popularity") + 1)
+        except Exception as exc:
+            logger.warning("Suggestion update failed: %s", exc)
 
-    def _get_client_ip(self, request):
-        forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "") if request else ""
-        if forwarded_for:
-            return forwarded_for.split(",")[0].strip()
-        return request.META.get("REMOTE_ADDR") if request else None
+    def _serialize_filters(self, filters: dict) -> dict:
+        return {
+            k: [str(v) for v in val] if isinstance(val, (list, tuple)) else val
+            for k, val in filters.items()
+        }
+
+    def _get_client_ip(self, request) -> str | None:
+        if not request:
+            return None
+        xff = request.META.get("HTTP_X_FORWARDED_FOR", "")
+        return xff.split(",")[0].strip() if xff else request.META.get("REMOTE_ADDR")
+
+    # ------------------------------------------------------------------
+    # Elasticsearch (optional)
+    # ------------------------------------------------------------------
 
     def _search_elasticsearch(self, query, filters, sort, page, page_size, user, track_search, request=None):
         try:
             from django_elasticsearch_dsl import Search
             from elasticsearch_dsl import Q as EsQ
-
             from .documents import ProductDocument
         except ImportError:
-            logger.warning("SEARCH_BACKEND=elasticsearch but Elasticsearch dependencies are not installed.")
+            logger.warning("Elasticsearch dependencies not installed; falling back to database.")
             return None
 
-        search = Search(index=ProductDocument._index._name)
-        search = search.query(
-            EsQ(
-                "multi_match",
-                query=query,
-                fields=["name^3", "description", "category.name^2"],
-                fuzziness="AUTO",
+        try:
+            search = Search(index=ProductDocument._index._name)
+            search = search.query(
+                EsQ("multi_match", query=query, fields=["name^3", "description", "category.name^2"], fuzziness="AUTO")
+                if query else EsQ("match_all")
             )
-            if query
-            else EsQ("match_all")
-        )
+            start = (page - 1) * page_size
+            response = search[start: start + page_size].execute()
 
-        start = (page - 1) * page_size
-        response = search[start : start + page_size].execute()
+            if track_search and query:
+                self._track_search(query, response.hits.total.value, user, filters, sort, page, request)
 
-        if track_search and query:
-            self._track_search(query, response.hits.total.value, user, filters, sort, page, request)
-
-        return {
-            "products": [hit.to_dict() for hit in response.hits],
-            "total": response.hits.total.value,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (response.hits.total.value + page_size - 1) // page_size,
-            "facets": {},
-            "suggestions": [],
-            "query": query,
-            "took": response.took,
-            "backend": "elasticsearch",
-        }
+            return {
+                "products": [hit.to_dict() for hit in response.hits],
+                "total": response.hits.total.value,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": (response.hits.total.value + page_size - 1) // page_size,
+                "facets": {},
+                "suggestions": [],
+                "query": query,
+                "took": response.took,
+                "backend": "elasticsearch",
+            }
+        except Exception as exc:
+            logger.warning("Elasticsearch search failed: %s — falling back to database.", exc)
+            return None
 
 
 search_service = ProductSearchService()

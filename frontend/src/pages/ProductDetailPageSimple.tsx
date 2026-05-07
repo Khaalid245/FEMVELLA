@@ -4,6 +4,9 @@ import Layout from "@/components/Layout";
 import ProductImageGallery from "@/components/ProductImageGallery";
 import { useSimpleProduct } from "@/api/testApi";
 import { useCartStore } from "@/store/cartStore";
+import ProductShelf from "@/components/ProductShelf";
+import { useSimilarProducts, useCompleteTheLook } from "@/api/recommendations";
+import { useTrackProductView } from "@/hooks/useTrackProductView";
 
 function PDPSkeleton() {
   return (
@@ -28,6 +31,17 @@ export default function ProductDetailPage() {
   const navigate = useNavigate();
   const { data: product, isLoading, isError } = useSimpleProduct(slug!);
   const addItem = useCartStore((s) => s.addItem);
+
+  // Track product view for recommendations
+  useTrackProductView(product?.id);
+
+  // Recommendation data
+  const { data: similarProducts = [], isLoading: similarLoading } = useSimilarProducts(
+    product?.id ?? 0, 4
+  );
+  const { data: lookProducts = [], isLoading: lookLoading } = useCompleteTheLook(
+    product?.id ?? 0, 4
+  );
 
   const [selectedSize, setSelectedSize] = useState<string>("");
   const [selectedColor, setSelectedColor] = useState<string>("");
@@ -184,6 +198,37 @@ export default function ProductDetailPage() {
             </p>
           </div>
         </div>
+      </div>
+
+      {/* ── Recommendation Shelves ── */}
+      <div style={{ marginTop: "64px", borderTop: "1px solid #EDE8E3", paddingTop: "64px" }}>
+        {/* Complete the Look */}
+        {(lookLoading || lookProducts.length > 0) && (
+          <ProductShelf
+            eyebrow="Style It With"
+            title="Complete the Look"
+            products={lookProducts}
+            isLoading={lookLoading}
+            layout="scroll"
+            skeletonCount={4}
+            columns={4}
+          />
+        )}
+
+        {/* Similar Products */}
+        {(similarLoading || similarProducts.length > 0) && (
+          <ProductShelf
+            eyebrow="You May Also Like"
+            title="Similar Products"
+            products={similarProducts}
+            isLoading={similarLoading}
+            layout="grid"
+            skeletonCount={4}
+            columns={4}
+            viewAllHref={product.category ? `/products?category=${product.category.slug}` : "/products"}
+            viewAllLabel="View Category"
+          />
+        )}
       </div>
     </Layout>
   );

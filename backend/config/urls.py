@@ -19,10 +19,12 @@ urlpatterns = [
     path("api/shipping/", include("apps.shipping.urls")),
     path("api/wishlist/", include("apps.wishlist.urls")),
     path("api/reviews/", include("apps.reviews.urls")),
+    path("api/search/", include("apps.search.urls")),
+    # Feature flags
+    path("api/feature-flags/", include("core.feature_flag_urls")),
     # SEO URLs (at root level)
     path("", include("apps.seo.urls")),
     # path("api/audit/", include("apps.audit.urls")),  # Temporarily disabled
-    # path("api/search/", include("apps.search.urls")),  # Temporarily disabled
 ]
 
 if settings.DEBUG:

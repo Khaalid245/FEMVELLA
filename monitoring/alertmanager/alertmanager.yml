@@ -1,0 +1,138 @@
+global:
+  resolve_timeout: 5m
+  slack_api_url: "${SLACK_WEBHOOK_URL}"
+  smtp_smarthost: "${EMAIL_HOST}:587"
+  smtp_from: "alerts@femvelle.com"
+  smtp_auth_username: "${EMAIL_HOST_USER}"
+  smtp_auth_password: "${EMAIL_HOST_PASSWORD}"
+  smtp_require_tls: true
+
+templates:
+  - "/etc/alertmanager/templates/*.tmpl"
+
+# ── Routing tree ──────────────────────────────────────────────────────────────
+route:
+  group_by: ["alertname", "severity", "team"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: "slack-general"
+
+  routes:
+    # Critical alerts — immediate Slack + PagerDuty
+    - match:
+        severity: critical
+      receiver: "critical-pagerduty"
+      group_wait: 10s
+      repeat_interval: 1h
+      continue: true
+
+    - match:
+        severity: critical
+      receiver: "slack-critical"
+      group_wait: 10s
+      repeat_interval: 1h
+
+    # Business alerts — separate Slack channel
+    - match:
+        team: business
+      receiver: "slack-business"
+      repeat_interval: 2h
+
+    # Platform/infra warnings
+    - match:
+        team: platform
+      receiver: "slack-platform"
+
+    # Backend warnings
+    - match:
+        team: backend
+      receiver: "slack-backend"
+
+# ── Inhibition rules ──────────────────────────────────────────────────────────
+inhibit_rules:
+  # If site is down, suppress all other alerts for that instance
+  - source_match:
+      alertname: "SiteDown"
+    target_match_re:
+      alertname: "HighResponseTime|HighErrorRate"
+    equal: ["instance"]
+
+  # If critical CPU, suppress warning CPU
+  - source_match:
+      alertname: "CriticalCPU"
+    target_match:
+      alertname: "HighCPU"
+    equal: ["instance"]
+
+  # If disk critical, suppress disk warning
+  - source_match:
+      alertname: "DiskSpaceCritical"
+    target_match:
+      alertname: "DiskSpaceLow"
+    equal: ["instance"]
+
+# ── Receivers ─────────────────────────────────────────────────────────────────
+receivers:
+  - name: "slack-general"
+    slack_configs:
+      - channel: "#femvelle-alerts"
+        title: "{{ .GroupLabels.alertname }}"
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Severity:* {{ .Labels.severity }}
+          *Description:* {{ .Annotations.description }}
+          {{ end }}
+        send_resolved: true
+
+  - name: "slack-critical"
+    slack_configs:
+      - channel: "#femvelle-critical"
+        color: "danger"
+        title: "🚨 CRITICAL: {{ .GroupLabels.alertname }}"
+        text: |
+          {{ range .Alerts }}
+          *{{ .Annotations.summary }}*
+          {{ .Annotations.description }}
+          {{ if .Annotations.runbook }}Runbook: {{ .Annotations.runbook }}{{ end }}
+          {{ end }}
+        send_resolved: true
+    email_configs:
+      - to: "oncall@femvelle.com"
+        subject: "🚨 CRITICAL: {{ .GroupLabels.alertname }}"
+        body: |
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          {{ end }}
+
+  - name: "critical-pagerduty"
+    pagerduty_configs:
+      - routing_key: "${PAGERDUTY_ROUTING_KEY}"
+        description: "{{ .GroupLabels.alertname }}: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}"
+        severity: "critical"
+        details:
+          environment: "production"
+          project: "femvelle"
+
+  - name: "slack-platform"
+    slack_configs:
+      - channel: "#femvelle-platform"
+        title: "⚠️ Platform: {{ .GroupLabels.alertname }}"
+        text: "{{ range .Alerts }}{{ .Annotations.summary }}\n{{ .Annotations.description }}{{ end }}"
+        send_resolved: true
+
+  - name: "slack-backend"
+    slack_configs:
+      - channel: "#femvelle-backend"
+        title: "⚠️ Backend: {{ .GroupLabels.alertname }}"
+        text: "{{ range .Alerts }}{{ .Annotations.summary }}\n{{ .Annotations.description }}{{ end }}"
+        send_resolved: true
+
+  - name: "slack-business"
+    slack_configs:
+      - channel: "#femvelle-business-alerts"
+        title: "📊 Business Alert: {{ .GroupLabels.alertname }}"
+        text: "{{ range .Alerts }}{{ .Annotations.summary }}\n{{ .Annotations.description }}{{ end }}"
+        send_resolved: true

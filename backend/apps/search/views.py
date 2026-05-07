@@ -188,14 +188,6 @@ class SearchViewSet(viewsets.ViewSet):
     
     @action(detail=False, methods=['get'])
     def popular_queries(self, request):
-        """
-        Get popular search queries
-        
-        Query Parameters:
-        - limit: Maximum queries (default: 10, max: 50)
-        - days: Number of days to look back (default: 7)
-        """
-        
         params = PopularQueriesParamsSerializer(data=self._query_data(request))
         params.is_valid(raise_exception=True)
         limit = params.validated_data["limit"]
@@ -228,6 +220,45 @@ class SearchViewSet(viewsets.ViewSet):
         except Exception:
             logger.exception("Popular queries error")
             return Response({'queries': []})
+
+    @action(detail=False, methods=['get'])
+    def trending(self, request):
+        """Return trending search queries."""
+        try:
+            limit = int(request.query_params.get('limit', 8))
+            queries = search_service.get_trending(limit=limit)
+            return Response({'queries': queries})
+        except Exception:
+            logger.exception("Trending queries error")
+            return Response({'queries': []})
+
+    @action(detail=False, methods=['get'])
+    def recently_viewed(self, request):
+        """Return recently viewed products for the current session."""
+        try:
+            session_key = request.session.session_key or request.META.get('HTTP_X_SESSION_ID', '')
+            if not session_key:
+                return Response({'products': []})
+            products = search_service.get_recently_viewed(session_key)
+            return Response({'products': products})
+        except Exception:
+            logger.exception("Recently viewed error")
+            return Response({'products': []})
+
+    @action(detail=False, methods=['post'])
+    def record_view(self, request):
+        """Record a product view for recently-viewed tracking."""
+        try:
+            product_id = int(request.data.get('product_id', 0))
+            session_key = request.session.session_key or request.META.get('HTTP_X_SESSION_ID', '')
+            if product_id and session_key:
+                if not request.session.session_key:
+                    request.session.create()
+                search_service.record_product_view(session_key, product_id)
+            return Response({'status': 'ok'})
+        except Exception:
+            logger.exception("Record view error")
+            return Response({'status': 'error'})
 
 
 class SearchAnalyticsViewSet(viewsets.ReadOnlyModelViewSet):

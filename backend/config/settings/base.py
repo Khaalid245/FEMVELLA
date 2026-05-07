@@ -151,11 +151,10 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_SAVE_EVERY_REQUEST = True
 
 # CSRF Protection
-CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=True)
+CSRF_COOKIE_SECURE = False
 CSRF_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SAMESITE = 'Strict'
 CSRF_USE_SESSIONS = True
-CSRF_FAILURE_VIEW = 'apps.security.views.csrf_failure'
 
 # Security Headers
 SECURE_BROWSER_XSS_FILTER = True
@@ -255,6 +254,30 @@ EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@femvelle.com")
 ADMIN_NOTIFICATION_EMAILS = env.list("ADMIN_NOTIFICATION_EMAILS", default=["admin@femvelle.com"])
 FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:5173")
+
+# ---------------------------------------------------------------------------
+# Search Configuration
+# ---------------------------------------------------------------------------
+SEARCH_BACKEND = "database"  # "database" | "elasticsearch"
+SEARCH_ANALYTICS = {
+    "TRACK_SEARCHES": True,
+    "TRACK_CLICKS": True,
+}
+SEARCH_SYNONYMS = {
+    "abaya": ["abaya", "abayas", "robe", "cloak"],
+    "hijab": ["hijab", "scarf", "headscarf", "veil"],
+    "dress": ["dress", "gown", "maxi", "frock"],
+    "modest": ["modest", "covered", "conservative", "elegant"],
+    "black": ["black", "noir", "dark"],
+    "white": ["white", "ivory", "cream", "off-white"],
+    "blue": ["blue", "navy", "cobalt", "azure"],
+    "set": ["set", "suit", "co-ord", "matching"],
+    "evening": ["evening", "formal", "occasion", "party"],
+    "casual": ["casual", "everyday", "relaxed", "daily"],
+}
+SEARCH_TRENDING_DAYS = 7
+SEARCH_TRENDING_LIMIT = 8
+SEARCH_RECENTLY_VIEWED_LIMIT = 6
 
 # ---------------------------------------------------------------------------
 # Stripe

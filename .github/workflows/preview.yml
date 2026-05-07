@@ -1,0 +1,220 @@
+name: PR Preview Deploy
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [develop, main]
+  pull_request_target:
+    types: [closed]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ── Deploy preview on PR open/update ──────────────────────────────────────
+  deploy-preview:
+    name: Deploy Preview
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    permissions:
+      contents: read
+      packages: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute preview slug
+        id: slug
+        run: |
+          PR_NUM="${{ github.event.pull_request.number }}"
+          SLUG="pr-${PR_NUM}"
+          echo "slug=$SLUG" >> $GITHUB_OUTPUT
+          echo "url=https://preview-${SLUG}.femvelle.com" >> $GITHUB_OUTPUT
+          echo "tag=preview-${PR_NUM}-$(echo ${{ github.sha }} | cut -c1-6)" >> $GITHUB_OUTPUT
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build & push preview backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.prod
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend:${{ steps.slug.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & push preview frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile.prod
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend:${{ steps.slug.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy preview environment
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            set -e
+            SLUG="${{ steps.slug.outputs.slug }}"
+            TAG="${{ steps.slug.outputs.tag }}"
+            PREVIEW_DIR="/opt/femvelle-previews/$SLUG"
+
+            mkdir -p $PREVIEW_DIR
+            cd $PREVIEW_DIR
+
+            # Write minimal compose for this preview
+            cat > docker-compose.yml << EOF
+            version: "3.8"
+            services:
+              django:
+                image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend:$TAG
+                environment:
+                  - DJANGO_SETTINGS_MODULE=config.settings.staging
+                  - DATABASE_URL=mysql://femvelle:${{ secrets.PREVIEW_DB_PASSWORD }}@preview-mysql:3306/femvelle_$SLUG
+                  - REDIS_URL=redis://preview-redis:6379/0
+                  - SECRET_KEY=${{ secrets.PREVIEW_SECRET_KEY }}
+                  - ALLOWED_HOSTS=preview-$SLUG.femvelle.com
+                networks: [preview_$SLUG]
+                labels:
+                  - "traefik.enable=true"
+                  - "traefik.http.routers.$SLUG-api.rule=Host(\`api.preview-$SLUG.femvelle.com\`)"
+                  - "traefik.http.routers.$SLUG-api.tls=true"
+                  - "traefik.http.routers.$SLUG-api.tls.certresolver=letsencrypt"
+              frontend:
+                image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend:$TAG
+                environment:
+                  - VITE_API_BASE_URL=https://api.preview-$SLUG.femvelle.com
+                  - VITE_ENVIRONMENT=preview
+                networks: [preview_$SLUG]
+                labels:
+                  - "traefik.enable=true"
+                  - "traefik.http.routers.$SLUG.rule=Host(\`preview-$SLUG.femvelle.com\`)"
+                  - "traefik.http.routers.$SLUG.tls=true"
+                  - "traefik.http.routers.$SLUG.tls.certresolver=letsencrypt"
+            networks:
+              preview_$SLUG:
+                external: true
+            EOF
+
+            # Create isolated network
+            docker network create preview_$SLUG 2>/dev/null || true
+
+            # Start preview
+            docker compose up -d
+
+            # Run migrations
+            docker compose run --rm django python manage.py migrate --settings=config.settings.staging
+
+            echo "Preview deployed: https://preview-$SLUG.femvelle.com"
+
+      - name: Post preview URL comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const slug = '${{ steps.slug.outputs.slug }}';
+            const url = '${{ steps.slug.outputs.url }}';
+            const tag = '${{ steps.slug.outputs.tag }}';
+            const sha = context.sha.substring(0, 8);
+
+            const body = [
+              '## 🚀 Preview Deployment',
+              '',
+              `| | |`,
+              `|---|---|`,
+              `| **URL** | [${url}](${url}) |`,
+              `| **API** | [https://api.preview-${slug}.femvelle.com](https://api.preview-${slug}.femvelle.com) |`,
+              `| **Image** | \`${tag}\` |`,
+              `| **Commit** | \`${sha}\` |`,
+              '',
+              '_Preview environments are automatically destroyed when the PR is closed._',
+            ].join('\n');
+
+            // Find existing preview comment
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.data.find(c =>
+              c.user.login === 'github-actions[bot]' && c.body.includes('Preview Deployment')
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+  # ── Destroy preview on PR close ───────────────────────────────────────────
+  destroy-preview:
+    name: Destroy Preview
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request_target' && github.event.action == 'closed'
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Destroy preview environment
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            SLUG="pr-${{ github.event.pull_request.number }}"
+            PREVIEW_DIR="/opt/femvelle-previews/$SLUG"
+
+            if [ -d "$PREVIEW_DIR" ]; then
+              cd $PREVIEW_DIR
+              docker compose down -v
+              docker network rm preview_$SLUG 2>/dev/null || true
+              cd /
+              rm -rf $PREVIEW_DIR
+              echo "✅ Preview $SLUG destroyed"
+            fi
+
+      - name: Update PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+            const existing = comments.data.find(c =>
+              c.user.login === 'github-actions[bot]' && c.body.includes('Preview Deployment')
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: '## ~~🚀 Preview Deployment~~\n\n_Preview environment destroyed (PR closed)._',
+              });
+            }

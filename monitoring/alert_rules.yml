@@ -1,0 +1,250 @@
+groups:
+  # ── Uptime & Availability ─────────────────────────────────────────────────
+  - name: uptime
+    rules:
+      - alert: SiteDown
+        expr: probe_success{job="blackbox-http"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "{{ $labels.instance }} is DOWN"
+          description: "HTTP probe has been failing for {{ $labels.instance }} for more than 1 minute."
+          runbook: "https://wiki.femvelle.com/runbooks/site-down"
+
+      - alert: SSLCertExpiringSoon
+        expr: probe_ssl_earliest_cert_expiry - time() < 86400 * 14
+        for: 1h
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "SSL certificate expiring in < 14 days for {{ $labels.instance }}"
+          description: "Certificate expires in {{ $value | humanizeDuration }}."
+
+      - alert: SSLCertExpiryCritical
+        expr: probe_ssl_earliest_cert_expiry - time() < 86400 * 3
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "SSL certificate expiring in < 3 days for {{ $labels.instance }}"
+
+      - alert: HighResponseTime
+        expr: probe_duration_seconds{job="blackbox-http"} > 3
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Slow response time on {{ $labels.instance }}"
+          description: "Response time is {{ $value | humanizeDuration }} (threshold: 3s)."
+
+  # ── Django Application ────────────────────────────────────────────────────
+  - name: django
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          rate(django_http_responses_total_by_status_total{status=~"5.."}[5m])
+          / rate(django_http_responses_total_by_status_total[5m]) > 0.05
+        for: 3m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "High 5xx error rate on Django"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)."
+
+      - alert: HighP95Latency
+        expr: |
+          histogram_quantile(0.95,
+            rate(django_http_requests_latency_seconds_by_view_method_bucket[5m])
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "P95 API latency > 2s"
+          description: "P95 latency is {{ $value | humanizeDuration }}."
+
+      - alert: DjangoDown
+        expr: up{job="django"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "Django application is unreachable"
+
+  # ── Database ──────────────────────────────────────────────────────────────
+  - name: mysql
+    rules:
+      - alert: MySQLDown
+        expr: up{job="mysql"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "MySQL is DOWN"
+
+      - alert: MySQLHighConnections
+        expr: mysql_global_status_threads_connected / mysql_global_variables_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "MySQL connection pool > 80%"
+          description: "{{ $value | humanizePercentage }} of max connections in use."
+
+      - alert: MySQLSlowQueries
+        expr: rate(mysql_global_status_slow_queries[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "MySQL slow query rate elevated"
+          description: "{{ $value }} slow queries/sec."
+
+      - alert: MySQLReplicationLag
+        expr: mysql_slave_status_seconds_behind_master > 30
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "MySQL replication lag > 30s"
+
+  # ── Redis ─────────────────────────────────────────────────────────────────
+  - name: redis
+    rules:
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Redis is DOWN"
+
+      - alert: RedisHighMemory
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Redis memory usage > 85%"
+          description: "{{ $value | humanizePercentage }} of max memory used."
+
+      - alert: RedisHighRejectedConnections
+        expr: rate(redis_rejected_connections_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Redis is rejecting connections"
+
+  # ── Infrastructure ────────────────────────────────────────────────────────
+  - name: infrastructure
+    rules:
+      - alert: HighCPU
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is {{ $value | humanize }}%."
+
+      - alert: CriticalCPU
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 95
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Critical CPU usage on {{ $labels.instance }}"
+
+      - alert: HighMemory
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.90
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage is {{ $value | humanizePercentage }}."
+
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.15
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Disk space < 15% on {{ $labels.instance }}"
+          description: "{{ $value | humanizePercentage }} free."
+
+      - alert: DiskSpaceCritical
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.05
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Disk space < 5% — CRITICAL on {{ $labels.instance }}"
+
+  # ── Celery ────────────────────────────────────────────────────────────────
+  - name: celery
+    rules:
+      - alert: CeleryQueueBacklog
+        expr: celery_queue_length > 100
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Celery queue backlog > 100 tasks"
+          description: "Queue length: {{ $value }}."
+
+      - alert: CeleryTaskFailureRate
+        expr: rate(celery_tasks_total{state="FAILURE"}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Celery task failure rate elevated"
+          description: "{{ $value }} failures/sec."
+
+  # ── Business Metrics ──────────────────────────────────────────────────────
+  - name: business
+    rules:
+      - alert: NoOrdersInLastHour
+        expr: increase(django_http_responses_total_by_status_total{status="201",view="order-list"}[1h]) == 0
+        for: 0m
+        labels:
+          severity: warning
+          team: business
+        annotations:
+          summary: "No new orders in the last hour"
+          description: "This may indicate a checkout issue. Investigate immediately."
+
+      - alert: HighPaymentFailureRate
+        expr: |
+          rate(django_http_responses_total_by_status_total{status="402"}[15m])
+          / rate(django_http_responses_total_by_status_total[15m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: business
+        annotations:
+          summary: "Payment failure rate > 10%"

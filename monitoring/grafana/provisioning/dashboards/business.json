@@ -1,0 +1,157 @@
+{
+  "title": "Femvelle — Business Metrics",
+  "uid": "femvelle-business",
+  "tags": ["femvelle", "business"],
+  "timezone": "browser",
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Orders (last 24h)",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "targets": [{
+        "expr": "increase(django_http_responses_total_by_status_total{status=\"201\",view=\"order-list\"}[24h])",
+        "legendFormat": "Orders"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "green", "value": 20 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Checkout Conversion Rate",
+      "type": "stat",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "targets": [{
+        "expr": "rate(django_http_responses_total_by_status_total{status=\"201\",view=\"order-list\"}[1h]) / rate(django_http_responses_total_by_status_total{view=\"order-list\"}[1h]) * 100",
+        "legendFormat": "Conversion %"
+      }],
+      "fieldConfig": { "defaults": { "unit": "percent" } }
+    },
+    {
+      "id": 3,
+      "title": "Payment Failure Rate",
+      "type": "stat",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+      "targets": [{
+        "expr": "rate(django_http_responses_total_by_status_total{status=\"402\"}[1h]) / rate(django_http_responses_total_by_status_total[1h]) * 100",
+        "legendFormat": "Failure %"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Active Sessions (30m)",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "targets": [{
+        "expr": "django_http_requests_total_by_view_transport_method_total{view!~\"health|metrics\"}",
+        "legendFormat": "Sessions"
+      }],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 5,
+      "title": "API Error Rate (5xx)",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+      "targets": [{
+        "expr": "job:django_http_errors:rate5m * 100",
+        "legendFormat": "Error %"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Uptime Status",
+      "type": "stat",
+      "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+      "targets": [{
+        "expr": "probe_success{job=\"blackbox-http\"}",
+        "legendFormat": "{{ instance }}"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+          ]
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Orders Over Time",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "increase(django_http_responses_total_by_status_total{status=\"201\",view=\"order-list\"}[1h])",
+        "legendFormat": "Orders/hour"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "fixedColor": "#C4985A", "mode": "fixed" },
+          "custom": { "fillOpacity": 20 }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "API Response Times (P50 / P95 / P99)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "job:django_latency_p50:5m * 1000", "legendFormat": "P50 ms" },
+        { "expr": "job:django_latency_p95:5m * 1000", "legendFormat": "P95 ms" },
+        { "expr": "job:django_latency_p99:5m * 1000", "legendFormat": "P99 ms" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "id": 9,
+      "title": "Error Logs (last 100)",
+      "type": "logs",
+      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [{
+        "expr": "{service=\"django\"} |= \"ERROR\" | json | line_format \"{{.levelname}} {{.module}} — {{.message}}\"",
+        "legendFormat": ""
+      }],
+      "options": { "showTime": true, "showLabels": false, "wrapLogMessage": true, "sortOrder": "Descending" }
+    }
+  ]
+}

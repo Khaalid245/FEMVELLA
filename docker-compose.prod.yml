@@ -1,76 +1,349 @@
+version: "3.8"
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+    tag: "{{.Name}}"
+
 services:
+  # ── Application ────────────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: femvelle_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/sites-enabled:/etc/nginx/sites-enabled:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - static_volume:/var/www/static
+      - media_volume:/var/www/media
+    depends_on: [django, frontend]
+    networks: [femvelle_network]
+    restart: unless-stopped
+    logging: *default-logging
+    labels:
+      com.docker.compose.project: femvelle
+      service: nginx
+
   django:
     build:
       context: ./backend
-      dockerfile: Dockerfile
-    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120
-    env_file:
-      - ./backend/.env.prod
+      dockerfile: Dockerfile.prod
+    container_name: femvelle_django
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.prod
-    depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_started
-    networks:
-      - femvelle
-    restart: unless-stopped
-
-  celery:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    command: celery -A config worker --loglevel=warning --concurrency 4
-    env_file:
-      - ./backend/.env.prod
-    environment:
-      - DJANGO_SETTINGS_MODULE=config.settings.prod
-    depends_on:
-      - django
-      - redis
-    networks:
-      - femvelle
-    restart: unless-stopped
-
-  mysql:
-    image: mysql:8.4
-    env_file:
-      - ./backend/.env.prod
+      - DATABASE_URL=mysql://femvelle:${DB_PASSWORD}@mysql:3306/femvelle_prod
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - SECRET_KEY=${SECRET_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_STORAGE_BUCKET_NAME=${AWS_STORAGE_BUCKET_NAME}
+      - SENTRY_DSN=${SENTRY_DSN}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - RELEASE_VERSION=${RELEASE_VERSION:-latest}
     volumes:
-      - mysql_data:/var/lib/mysql
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+      - ./logs:/app/logs
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [femvelle_network]
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - femvelle
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    networks:
-      - femvelle
-    restart: unless-stopped
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging: *default-logging
+    labels:
+      com.docker.compose.project: femvelle
+      service: django
 
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
-      target: prod
-    ports:
-      - "80:80"
-      - "443:443"
-    depends_on:
-      - django
-    networks:
-      - femvelle
+      dockerfile: Dockerfile.prod
+    container_name: femvelle_frontend
+    environment:
+      - VITE_API_BASE_URL=https://api.femvelle.com
+      - VITE_STRIPE_PUBLIC_KEY=${STRIPE_PUBLIC_KEY}
+      - VITE_SENTRY_DSN=${FRONTEND_SENTRY_DSN}
+    networks: [femvelle_network]
     restart: unless-stopped
+    logging: *default-logging
+    labels:
+      com.docker.compose.project: femvelle
+      service: frontend
+
+  celery:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: femvelle_celery
+    command: celery -A config worker -l info --concurrency=4
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.prod
+      - DATABASE_URL=mysql://femvelle:${DB_PASSWORD}@mysql:3306/femvelle_prod
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - SECRET_KEY=${SECRET_KEY}
+      - SENTRY_DSN=${SENTRY_DSN}
+    volumes: [./logs:/app/logs]
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [femvelle_network]
+    restart: unless-stopped
+    logging: *default-logging
+    labels:
+      com.docker.compose.project: femvelle
+      service: celery
+
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: femvelle_celery_beat
+    command: celery -A config beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.prod
+      - DATABASE_URL=mysql://femvelle:${DB_PASSWORD}@mysql:3306/femvelle_prod
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - SECRET_KEY=${SECRET_KEY}
+    volumes: [./logs:/app/logs]
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [femvelle_network]
+    restart: unless-stopped
+    logging: *default-logging
+
+  # ── Data stores ────────────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: femvelle_mysql
+    environment:
+      - MYSQL_DATABASE=femvelle_prod
+      - MYSQL_USER=femvelle
+      - MYSQL_PASSWORD=${DB_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/conf.d:/etc/mysql/conf.d:ro
+      - ./backups:/backups
+    networks: [femvelle_network]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging: *default-logging
+
+  redis:
+    image: redis:7-alpine
+    container_name: femvelle_redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes: [redis_data:/data]
+    networks: [femvelle_network]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging: *default-logging
+
+  # ── Metrics collection ─────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: femvelle_prometheus
+    ports: ["9090:9090"]
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+      - ./monitoring/recording_rules.yml:/etc/prometheus/recording_rules.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--storage.tsdb.retention.size=10GB"
+      - "--web.enable-lifecycle"
+      - "--web.enable-admin-api"
+    networks: [femvelle_network]
+    restart: unless-stopped
+    logging: *default-logging
+
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: femvelle_node_exporter
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.rootfs=/rootfs"
+      - "--path.sysfs=/host/sys"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    networks: [femvelle_network]
+    restart: unless-stopped
+    logging: *default-logging
+
+  mysql-exporter:
+    image: prom/mysqld-exporter:v0.15.1
+    container_name: femvelle_mysql_exporter
+    environment:
+      - DATA_SOURCE_NAME=exporter:${MYSQL_EXPORTER_PASSWORD}@(mysql:3306)/
+    networks: [femvelle_network]
+    depends_on: [mysql]
+    restart: unless-stopped
+    logging: *default-logging
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.58.0
+    container_name: femvelle_redis_exporter
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    networks: [femvelle_network]
+    depends_on: [redis]
+    restart: unless-stopped
+    logging: *default-logging
+
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:1.1.0
+    container_name: femvelle_nginx_exporter
+    command: --nginx.scrape-uri=http://nginx:8080/stub_status
+    networks: [femvelle_network]
+    depends_on: [nginx]
+    restart: unless-stopped
+    logging: *default-logging
+
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.24.0
+    container_name: femvelle_blackbox
+    volumes:
+      - ./monitoring/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+    networks: [femvelle_network]
+    restart: unless-stopped
+    logging: *default-logging
+
+  # ── Alerting ───────────────────────────────────────────────────────────────
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: femvelle_alertmanager
+    ports: ["9093:9093"]
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    environment:
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+      - PAGERDUTY_ROUTING_KEY=${PAGERDUTY_ROUTING_KEY}
+      - EMAIL_HOST=${EMAIL_HOST}
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+      - "--cluster.advertise-address=0.0.0.0:9093"
+    networks: [femvelle_network]
+    restart: unless-stopped
+    logging: *default-logging
+
+  # ── Log aggregation ────────────────────────────────────────────────────────
+  loki:
+    image: grafana/loki:2.9.4
+    container_name: femvelle_loki
+    ports: ["3100:3100"]
+    volumes:
+      - ./monitoring/loki/loki.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks: [femvelle_network]
+    restart: unless-stopped
+    logging: *default-logging
+
+  promtail:
+    image: grafana/promtail:2.9.4
+    container_name: femvelle_promtail
+    volumes:
+      - ./monitoring/loki/promtail.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./logs:/var/log/femvelle:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks: [femvelle_network]
+    depends_on: [loki]
+    restart: unless-stopped
+    logging: *default-logging
+
+  # ── Dashboards ─────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.3.3
+    container_name: femvelle_grafana
+    ports: ["3000:3000"]
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=https://monitoring.femvelle.com/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - GF_SMTP_ENABLED=true
+      - GF_SMTP_HOST=${EMAIL_HOST}:587
+      - GF_SMTP_USER=${EMAIL_HOST_USER}
+      - GF_SMTP_PASSWORD=${EMAIL_HOST_PASSWORD}
+      - GF_SMTP_FROM_ADDRESS=grafana@femvelle.com
+      - GF_ALERTING_ENABLED=true
+      - GF_UNIFIED_ALERTING_ENABLED=true
+      - GF_FEATURE_TOGGLES_ENABLE=publicDashboards
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks: [femvelle_network]
+    depends_on: [prometheus, loki]
+    restart: unless-stopped
+    logging: *default-logging
+
+  # ── Backup ─────────────────────────────────────────────────────────────────
+  backup:
+    build:
+      context: ./backup
+      dockerfile: Dockerfile
+    container_name: femvelle_backup
+    environment:
+      - DB_PASSWORD=${DB_PASSWORD}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - BACKUP_BUCKET=${BACKUP_BUCKET}
+    volumes:
+      - mysql_data:/var/lib/mysql:ro
+      - ./backups:/backups
+    depends_on: [mysql]
+    networks: [femvelle_network]
+    restart: "no"
 
 volumes:
   mysql_data:
+  redis_data:
+  static_volume:
+  media_volume:
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:
+  loki_data:
 
 networks:
-  femvelle:
+  femvelle_network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

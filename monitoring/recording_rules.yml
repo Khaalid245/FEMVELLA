@@ -1,0 +1,35 @@
+groups:
+  - name: femvelle_recording_rules
+    interval: 30s
+    rules:
+      # Request rate per minute
+      - record: job:django_http_requests:rate1m
+        expr: rate(django_http_requests_latency_seconds_count[1m]) * 60
+
+      # Error rate
+      - record: job:django_http_errors:rate5m
+        expr: |
+          rate(django_http_responses_total_by_status_total{status=~"5.."}[5m])
+          / rate(django_http_responses_total_by_status_total[5m])
+
+      # P50 / P95 / P99 latency
+      - record: job:django_latency_p50:5m
+        expr: histogram_quantile(0.50, rate(django_http_requests_latency_seconds_by_view_method_bucket[5m]))
+
+      - record: job:django_latency_p95:5m
+        expr: histogram_quantile(0.95, rate(django_http_requests_latency_seconds_by_view_method_bucket[5m]))
+
+      - record: job:django_latency_p99:5m
+        expr: histogram_quantile(0.99, rate(django_http_requests_latency_seconds_by_view_method_bucket[5m]))
+
+      # CPU usage
+      - record: instance:node_cpu_utilisation:rate5m
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+
+      # Memory usage
+      - record: instance:node_memory_utilisation:ratio
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes
+
+      # Disk usage
+      - record: instance:node_disk_utilisation:ratio
+        expr: 1 - (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"})

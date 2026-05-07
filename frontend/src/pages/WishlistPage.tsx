@@ -1,229 +1,338 @@
-import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, ShoppingBag, Trash2, ArrowRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { useWishlist, useRemoveFromWishlist, useClearWishlist } from '../api/wishlist';
-import { WishlistHeart } from '../components/WishlistHeart';
+import { motion, AnimatePresence } from "framer-motion";
+import { Link } from "react-router-dom";
+import Layout from "@/components/Layout";
+import { useWishlist, useRemoveFromWishlist, useClearWishlist } from "@/api/wishlist";
+import ProductCardSkeleton from "@/components/ProductCardSkeleton";
 
-export const WishlistPage: React.FC = () => {
-  const { data: wishlist, isLoading, error } = useWishlist();
+const ease = [0.22, 1, 0.36, 1] as const;
+
+export function WishlistPage() {
+  const { data: wishlist, isLoading, isError } = useWishlist();
   const removeFromWishlist = useRemoveFromWishlist();
   const clearWishlist = useClearWishlist();
-
-  const handleRemoveItem = (productId: number) => {
-    removeFromWishlist.mutate(productId);
-  };
-
-  const handleClearWishlist = () => {
-    if (window.confirm('Are you sure you want to clear your entire wishlist?')) {
-      clearWishlist.mutate();
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#FEFCF8] py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="animate-pulse space-y-8">
-            <div className="h-8 bg-gray-200 rounded w-1/4"></div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[1, 2, 3, 4, 5, 6].map((i) => (
-                <div key={i} className="bg-white rounded-lg p-4 space-y-4">
-                  <div className="aspect-square bg-gray-200 rounded"></div>
-                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                  <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-[#FEFCF8] py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <Heart className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-            <h2 className="text-2xl font-semibold text-[#2C2420] mb-2">
-              Unable to load wishlist
-            </h2>
-            <p className="text-gray-600">Please try again later.</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   const isEmpty = !wishlist?.items?.length;
 
   return (
-    <div className="min-h-screen bg-[#FEFCF8] py-12">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <Layout>
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease }}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div style={{
+          display: "flex",
+          alignItems: "flex-end",
+          justifyContent: "space-between",
+          marginBottom: "48px",
+          flexWrap: "wrap",
+          gap: "16px",
+        }}>
           <div>
-            <h1 className="text-3xl font-bold text-[#2C2420] font-serif">
+            <p style={{
+              fontFamily: "'Inter', sans-serif",
+              fontSize: "10px",
+              letterSpacing: "0.22em",
+              textTransform: "uppercase",
+              color: "#C4985A",
+              marginBottom: "8px",
+            }}>
+              Saved Items
+            </p>
+            <h1 style={{
+              fontFamily: "'Cormorant Garamond', Georgia, serif",
+              fontSize: "clamp(28px, 4vw, 42px)",
+              fontWeight: 400,
+              color: "#2C2420",
+              lineHeight: 1.1,
+            }}>
               My Wishlist
+              {!isEmpty && (
+                <span style={{
+                  fontFamily: "'Inter', sans-serif",
+                  fontSize: "14px",
+                  fontWeight: 400,
+                  color: "#9E8E88",
+                  marginLeft: "12px",
+                }}>
+                  ({wishlist.item_count} {wishlist.item_count === 1 ? "item" : "items"})
+                </span>
+              )}
             </h1>
-            {!isEmpty && (
-              <p className="text-gray-600 mt-2">
-                {wishlist.item_count} item{wishlist.item_count !== 1 ? 's' : ''} • 
-                Total value: ${wishlist.total_value.toFixed(2)}
-              </p>
-            )}
           </div>
 
           {!isEmpty && (
             <button
-              onClick={handleClearWishlist}
+              onClick={() => {
+                if (window.confirm("Clear your entire wishlist?")) clearWishlist.mutate();
+              }}
               disabled={clearWishlist.isPending}
-              className="
-                flex items-center space-x-2 px-4 py-2 text-red-600 hover:text-red-700
-                border border-red-200 hover:border-red-300 rounded-lg
-                transition-colors duration-200 disabled:opacity-50
-              "
+              style={{
+                fontFamily: "'Inter', sans-serif",
+                fontSize: "11px",
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                color: "#9E8E88",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                transition: "color 0.2s ease",
+                padding: 0,
+              }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "#2C2420")}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "#9E8E88")}
             >
-              <Trash2 className="w-4 h-4" />
-              <span>Clear All</span>
+              Clear all
             </button>
           )}
         </div>
 
+        {/* Loading */}
+        {isLoading && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <ProductCardSkeleton key={i} />
+            ))}
+          </div>
+        )}
+
+        {/* Error */}
+        {isError && (
+          <div className="flex flex-col items-center justify-center" style={{ padding: "80px 0", gap: "20px" }}>
+            <div style={{
+              width: "64px",
+              height: "64px",
+              borderRadius: "50%",
+              background: "#F8F6F3",
+              border: "1px solid #EDE8E3",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C4985A" strokeWidth="1.4">
+                <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+              </svg>
+            </div>
+            <p style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: "22px", color: "#2C2420" }}>
+              Unable to load wishlist
+            </p>
+            <p style={{ fontFamily: "'Inter', sans-serif", fontSize: "13px", color: "#9E8E88" }}>
+              Please try again later.
+            </p>
+          </div>
+        )}
+
         {/* Empty State */}
-        {isEmpty && (
+        {!isLoading && !isError && isEmpty && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-center py-16"
+            transition={{ duration: 0.6, ease }}
+            className="flex flex-col items-center justify-center text-center"
+            style={{ padding: "80px 24px" }}
           >
-            <Heart className="w-24 h-24 mx-auto text-gray-300 mb-6" />
-            <h2 className="text-2xl font-semibold text-[#2C2420] mb-4">
+            <div style={{
+              width: "72px",
+              height: "72px",
+              borderRadius: "50%",
+              background: "#F8F6F3",
+              border: "1px solid #EDE8E3",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: "28px",
+            }}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#C4985A" strokeWidth="1.4">
+                <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+              </svg>
+            </div>
+
+            <p style={{
+              fontFamily: "'Cormorant Garamond', Georgia, serif",
+              fontSize: "32px",
+              fontWeight: 400,
+              color: "#2C2420",
+              marginBottom: "12px",
+            }}>
               Your wishlist is empty
-            </h2>
-            <p className="text-gray-600 mb-8 max-w-md mx-auto">
-              Start adding items you love to your wishlist. 
-              They'll be saved here for easy access later.
             </p>
+            <p style={{
+              fontFamily: "'Inter', sans-serif",
+              fontSize: "14px",
+              lineHeight: 1.7,
+              color: "#9E8E88",
+              maxWidth: "320px",
+              marginBottom: "36px",
+            }}>
+              Save pieces you love and return to them whenever you're ready.
+            </p>
+
             <Link
               to="/products"
-              className="
-                inline-flex items-center space-x-2 bg-[#C4985A] text-white
-                px-6 py-3 rounded-lg hover:bg-[#B8894E] transition-colors duration-200
-              "
+              style={{
+                fontFamily: "'Inter', sans-serif",
+                fontSize: "11px",
+                letterSpacing: "0.2em",
+                textTransform: "uppercase",
+                color: "#fff",
+                background: "#2C2420",
+                textDecoration: "none",
+                padding: "14px 36px",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "10px",
+                transition: "background 0.2s ease",
+              }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "#3D3330")}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "#2C2420")}
             >
-              <ShoppingBag className="w-5 h-5" />
-              <span>Start Shopping</span>
-              <ArrowRight className="w-4 h-4" />
+              Explore Collection
+              <span style={{ fontSize: "14px" }}>→</span>
             </Link>
           </motion.div>
         )}
 
-        {/* Wishlist Items */}
-        {!isEmpty && (
-          <AnimatePresence mode="popLayout">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {wishlist.items.map((item) => (
-                <motion.div
-                  key={item.id}
-                  layout
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ duration: 0.2 }}
-                  className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200"
-                >
-                  <div className="relative group">
-                    {/* Product Image */}
-                    <Link to={`/products/${item.product.slug}`}>
-                      <div className="aspect-square overflow-hidden rounded-t-lg">
+        {/* Items Grid */}
+        {!isLoading && !isError && !isEmpty && (
+          <>
+            <AnimatePresence mode="popLayout">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
+                {wishlist.items.map((item: any) => (
+                  <motion.div
+                    key={item.id}
+                    layout
+                    initial={{ opacity: 0, scale: 0.96 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.96 }}
+                    transition={{ duration: 0.3, ease }}
+                    className="group"
+                    style={{ background: "#fff", position: "relative" }}
+                  >
+                    {/* Image */}
+                    <Link
+                      to={`/products/${item.product.slug}`}
+                      style={{ display: "block", position: "relative", overflow: "hidden" }}
+                    >
+                      <div style={{ aspectRatio: "3/4", background: "#F5F0EB", overflow: "hidden" }}>
                         <img
-                          src={item.product.image_url || '/placeholder-product.jpg'}
+                          src={item.product.image_url || "/placeholder-product.jpg"}
                           alt={item.product.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                            transition: "transform 0.6s ease",
+                          }}
+                          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.transform = "scale(1.04)")}
+                          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.transform = "scale(1)")}
                         />
                       </div>
                     </Link>
 
-                    {/* Wishlist Heart */}
-                    <div className="absolute top-3 right-3">
-                      <WishlistHeart productId={item.product.id} />
-                    </div>
-
-                    {/* Quick Remove Button */}
-                    <motion.button
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => handleRemoveItem(item.product.id)}
+                    {/* Remove button */}
+                    <button
+                      onClick={() => removeFromWishlist.mutate(item.product.id)}
                       disabled={removeFromWishlist.isPending}
-                      className="
-                        absolute top-3 left-3 p-2 bg-white/80 backdrop-blur-sm
-                        border border-gray-200 rounded-full opacity-0 group-hover:opacity-100
-                        hover:bg-white hover:border-red-300 transition-all duration-200
-                        disabled:opacity-50
-                      "
-                      title="Remove from wishlist"
+                      aria-label="Remove from wishlist"
+                      style={{
+                        position: "absolute",
+                        top: "12px",
+                        right: "12px",
+                        width: "32px",
+                        height: "32px",
+                        background: "rgba(255,255,255,0.9)",
+                        backdropFilter: "blur(4px)",
+                        border: "none",
+                        borderRadius: "2px",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "#9E8E88",
+                        opacity: 0,
+                        transition: "opacity 0.2s ease, color 0.2s ease",
+                      }}
+                      className="group-hover:opacity-100"
+                      onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "#2C2420")}
+                      onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "#9E8E88")}
                     >
-                      <Trash2 className="w-4 h-4 text-red-500" />
-                    </motion.button>
-                  </div>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
 
-                  {/* Product Info */}
-                  <div className="p-4">
-                    <Link to={`/products/${item.product.slug}`}>
-                      <h3 className="font-medium text-[#2C2420] hover:text-[#C4985A] transition-colors duration-200 line-clamp-2">
-                        {item.product.name}
-                      </h3>
-                    </Link>
-                    
-                    <p className="text-sm text-gray-500 mt-1 capitalize">
-                      {item.product.category}
-                    </p>
-                    
-                    <div className="flex items-center justify-between mt-3">
-                      <span className="text-lg font-semibold text-[#2C2420]">
-                        ${item.product.price.toFixed(2)}
-                      </span>
-                      
-                      <Link
-                        to={`/products/${item.product.slug}`}
-                        className="
-                          text-sm text-[#C4985A] hover:text-[#B8894E] 
-                          font-medium transition-colors duration-200
-                        "
-                      >
-                        View Details
+                    {/* Info */}
+                    <div style={{ paddingTop: "12px", paddingBottom: "4px" }}>
+                      <p style={{
+                        fontFamily: "'Inter', sans-serif",
+                        fontSize: "10px",
+                        letterSpacing: "0.12em",
+                        textTransform: "uppercase",
+                        color: "#C4985A",
+                        marginBottom: "4px",
+                      }}>
+                        {item.product.category}
+                      </p>
+
+                      <Link to={`/products/${item.product.slug}`} style={{ textDecoration: "none" }}>
+                        <h3
+                          className="hover-underline"
+                          style={{
+                            fontFamily: "'Cormorant Garamond', Georgia, serif",
+                            fontSize: "16px",
+                            fontWeight: 500,
+                            color: "#2C2420",
+                            marginBottom: "6px",
+                            display: "inline-block",
+                          }}
+                        >
+                          {item.product.name}
+                        </h3>
                       </Link>
+
+                      <p style={{
+                        fontFamily: "'Inter', sans-serif",
+                        fontSize: "14px",
+                        fontWeight: 500,
+                        color: "#2C2420",
+                      }}>
+                        ${Number(item.product.price).toFixed(2)}
+                      </p>
                     </div>
+                  </motion.div>
+                ))}
+              </div>
+            </AnimatePresence>
 
-                    <p className="text-xs text-gray-400 mt-2">
-                      Added {new Date(item.added_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                </motion.div>
-              ))}
+            {/* Continue shopping */}
+            <div style={{ textAlign: "center", marginTop: "64px" }}>
+              <Link
+                to="/products"
+                className="hover-underline"
+                style={{
+                  fontFamily: "'Inter', sans-serif",
+                  fontSize: "12px",
+                  letterSpacing: "0.12em",
+                  textTransform: "uppercase",
+                  color: "#2C2420",
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  transition: "color 0.2s ease",
+                }}
+                onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "#C4985A")}
+                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "#2C2420")}
+              >
+                Continue Shopping
+                <span style={{ fontSize: "14px" }}>→</span>
+              </Link>
             </div>
-          </AnimatePresence>
+          </>
         )}
-
-        {/* Continue Shopping */}
-        {!isEmpty && (
-          <div className="text-center mt-12">
-            <Link
-              to="/products"
-              className="
-                inline-flex items-center space-x-2 text-[#C4985A] hover:text-[#B8894E]
-                font-medium transition-colors duration-200
-              "
-            >
-              <span>Continue Shopping</span>
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
-        )}
-      </div>
-    </div>
+      </motion.div>
+    </Layout>
   );
-};
+}

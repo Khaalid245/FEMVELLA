@@ -12,7 +12,12 @@ import HomePage from "@/pages/HomePage";
 import ShopPage from "@/pages/ShopPage";
 import ProductDetailPageSimple from "@/pages/ProductDetailPageSimple";
 import CartPage from "@/pages/CartPage";
+import { WishlistPage } from "@/pages/WishlistPage";
 import ContactPage from "@/pages/ContactPage";
+import PrivacyPolicyPage from "@/pages/PrivacyPolicyPage";
+import TermsPage from "@/pages/TermsPage";
+import ShippingPolicyPage from "@/pages/ShippingPolicyPage";
+import ReturnPolicyPage from "@/pages/ReturnPolicyPage";
 import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
 import CheckoutPage from "@/pages/CheckoutPage";
@@ -43,7 +48,12 @@ export default function App() {
         <Route path="/products" element={<ShopPage />} />
         <Route path="/products/:slug" element={<ProductDetailPageSimple />} />
         <Route path="/cart" element={<CartPage />} />
+        <Route path="/wishlist" element={<ProtectedRoute><WishlistPage /></ProtectedRoute>} />
         <Route path="/contact" element={<ContactPage />} />
+        <Route path="/privacy" element={<PrivacyPolicyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/shipping-policy" element={<ShippingPolicyPage />} />
+        <Route path="/returns" element={<ReturnPolicyPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
 

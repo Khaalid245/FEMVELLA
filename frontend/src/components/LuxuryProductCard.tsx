@@ -41,10 +41,12 @@ function LuxuryProductCard({ product }: Props) {
 
   return (
     <motion.article
-      whileHover={{ y: -5 }}
-      transition={{ duration: 0.25, ease: "easeOut" }}
+      whileHover={{ y: -4 }}
+      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
       className="group relative bg-white flex flex-col"
-      style={{ boxShadow: "0 1px 3px rgba(44,36,32,0.06)" }}
+      style={{ boxShadow: "0 1px 3px rgba(44,36,32,0.06)", transition: "box-shadow 0.3s ease" }}
+      onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.boxShadow = "0 8px 32px rgba(44,36,32,0.10)")}
+      onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.boxShadow = "0 1px 3px rgba(44,36,32,0.06)")}
     >
       {/* ── Image ── */}
       <Link to={productPath} className="relative block aspect-[3/4] overflow-hidden bg-[#F5F0EB]">
@@ -53,7 +55,7 @@ function LuxuryProductCard({ product }: Props) {
             src={primaryImage.image}
             alt={product.name}
             loading="lazy"
-            className="w-full h-full object-cover object-top transition-transform duration-700 ease-out group-hover:scale-105"
+            className="w-full h-full object-cover object-top transition-transform duration-700 ease-out group-hover:scale-[1.04]"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
@@ -91,8 +93,12 @@ function LuxuryProductCard({ product }: Props) {
         <button
           onClick={handleAddToCart}
           disabled={isOutOfStock}
-          className="absolute bottom-0 left-0 right-0 py-3 text-white text-[11px] tracking-[0.18em] uppercase font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-300 disabled:cursor-not-allowed"
-          style={{ background: isOutOfStock ? "rgba(107,91,85,0.85)" : "rgba(44,36,32,0.92)" }}
+          className="absolute bottom-0 left-0 right-0 py-3.5 text-white text-[10px] tracking-[0.2em] uppercase font-medium opacity-0 group-hover:opacity-100 transition-all duration-300 disabled:cursor-not-allowed"
+          style={{
+            background: isOutOfStock ? "rgba(107,91,85,0.88)" : "rgba(44,36,32,0.94)",
+            letterSpacing: "0.2em",
+            fontFamily: "'Inter', sans-serif",
+          }}
         >
           {isOutOfStock ? "Out of Stock" : addedFeedback ? "Added ✓" : "Add to Cart"}
         </button>
@@ -109,12 +115,13 @@ function LuxuryProductCard({ product }: Props) {
 
         <Link to={productPath}>
           <h3
-            className="text-sm font-medium truncate hover:underline underline-offset-2"
+            className="text-sm font-medium truncate hover-underline"
             style={{
               color: "#2C2420",
               fontFamily: "'Cormorant Garamond', Georgia, serif",
               fontSize: "16px",
               fontWeight: 500,
+              display: "inline-block",
             }}
           >
             {product.name}
