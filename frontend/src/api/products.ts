@@ -66,7 +66,8 @@ export const useProduct = (slug: string) => {
     queryFn: () => api.get<Product>(`/products/${slug}/`).then((r) => r.data),
     enabled: isValidSlug,
     retry: false,
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 60 * 10, // 10 minutes cache
+    gcTime: 1000 * 60 * 30, // 30 minutes garbage collection
   });
 };
 

@@ -10,8 +10,9 @@ import AdminProductsPage from "@/admin/AdminProductsPage";
 import AdminEditProductPage from "@/admin/AdminEditProductPage";
 import HomePage from "@/pages/HomePage";
 import ShopPage from "@/pages/ShopPage";
-import ProductDetailPage from "@/pages/ProductDetailPage";
+import ProductDetailPageSimple from "@/pages/ProductDetailPageSimple";
 import CartPage from "@/pages/CartPage";
+import ContactPage from "@/pages/ContactPage";
 import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
 import CheckoutPage from "@/pages/CheckoutPage";
@@ -40,8 +41,9 @@ export default function App() {
         {/* Public */}
         <Route path="/" element={<HomePage />} />
         <Route path="/products" element={<ShopPage />} />
-        <Route path="/products/:slug" element={<ProductDetailPage />} />
+        <Route path="/products/:slug" element={<ProductDetailPageSimple />} />
         <Route path="/cart" element={<CartPage />} />
+        <Route path="/contact" element={<ContactPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
 

@@ -15,7 +15,9 @@ urlpatterns = [
     path("api/payments/", include("apps.payments.urls")),
     path("api/blog/", include("apps.blog.urls")),
     path("api/analytics/", include("apps.analytics.urls")),
-    path("api/audit/", include("apps.audit.urls")),
+    path("api/contact/", include("apps.contact.urls")),
+    # path("api/audit/", include("apps.audit.urls")),  # Temporarily disabled
+    # path("api/search/", include("apps.search.urls")),  # Temporarily disabled
 ]
 
 if settings.DEBUG:

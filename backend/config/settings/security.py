@@ -51,16 +51,23 @@ REST_FRAMEWORK.update({
         'login': env('THROTTLE_LOGIN', default='5/min'),
         'register': env('THROTTLE_REGISTER', default='3/min'),
         'password_reset': env('THROTTLE_PASSWORD_RESET', default='3/hour'),
+        'search': env('THROTTLE_SEARCH', default='120/min'),
+        'search_click': env('THROTTLE_SEARCH_CLICK', default='30/min'),
     }
 })
 
 # Content Security Policy
+CSP_ALLOW_UNSAFE_INLINE = env.bool('CSP_ALLOW_UNSAFE_INLINE', default=False)
 CSP_DEFAULT_SRC = ("'self'",)
-CSP_SCRIPT_SRC = ("'self'", "'unsafe-inline'", "https://js.stripe.com")
-CSP_STYLE_SRC = ("'self'", "'unsafe-inline'", "https://fonts.googleapis.com")
+CSP_SCRIPT_SRC = ("'self'", "https://js.stripe.com")
+CSP_STYLE_SRC = ("'self'", "https://fonts.googleapis.com")
+if CSP_ALLOW_UNSAFE_INLINE:
+    CSP_SCRIPT_SRC += ("'unsafe-inline'",)
+    CSP_STYLE_SRC += ("'unsafe-inline'",)
 CSP_FONT_SRC = ("'self'", "https://fonts.gstatic.com")
 CSP_IMG_SRC = ("'self'", "data:", "https:")
 CSP_CONNECT_SRC = ("'self'", "https://api.stripe.com")
+CSP_FRAME_SRC = ("'self'", "https://js.stripe.com", "https://hooks.stripe.com")
 
 # File Upload Security
 FILE_UPLOAD_MAX_MEMORY_SIZE = env.int('FILE_UPLOAD_MAX_MEMORY_SIZE', default=5242880)  # 5MB
@@ -68,6 +75,7 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = env.int('DATA_UPLOAD_MAX_MEMORY_SIZE', default=524
 FILE_UPLOAD_PERMISSIONS = 0o644
 ALLOWED_IMAGE_EXTENSIONS = env.list('ALLOWED_IMAGE_EXTENSIONS', default=['jpg', 'jpeg', 'png', 'webp', 'gif'])
 MAX_IMAGE_SIZE = env.int('MAX_IMAGE_SIZE', default=10485760)  # 10MB
+MAX_PRODUCT_IMAGE_COUNT = env.int('MAX_PRODUCT_IMAGE_COUNT', default=5)
 
 # API Security
 CORS_ALLOW_CREDENTIALS = True

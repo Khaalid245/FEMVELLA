@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
+import { openWhatsApp } from "@/utils/whatsapp";
 
 // ─────────────────────────────────────────────
 // Types
@@ -29,6 +30,18 @@ const SUPPORT_LINKS: FooterLink[] = [
   { label: "Returns",         to: "/returns" },
   { label: "Shipping",        to: "/shipping" },
   { label: "Privacy Policy",  to: "/privacy" },
+];
+
+const CHAT_LINKS = [
+  {
+    label: "Chat With Us",
+    action: () => openWhatsApp("Hello Femvelle, I need assistance with my order."),
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+      </svg>
+    ),
+  },
 ];
 
 const SOCIAL = [
@@ -312,7 +325,45 @@ export default function Footer() {
           <FooterColumn title="Quick Links" links={QUICK_LINKS} />
 
           {/* Col 3 — Support */}
-          <FooterColumn title="Support" links={SUPPORT_LINKS} />
+          <div>
+            <FooterColumn title="Support" links={SUPPORT_LINKS} />
+            
+            {/* WhatsApp Chat */}
+            <div className="mt-8">
+              {CHAT_LINKS.map((chat) => (
+                <button
+                  key={chat.label}
+                  onClick={chat.action}
+                  className="group inline-flex items-center gap-2 transition-all duration-200"
+                  style={{
+                    background: "transparent",
+                    border: "1px solid rgba(196, 152, 90, 0.3)",
+                    borderRadius: "4px",
+                    padding: "8px 12px",
+                    fontFamily: "'Inter', sans-serif",
+                    fontSize: "11px",
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    color: "#C4985A",
+                    cursor: "pointer",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = "rgba(196, 152, 90, 0.1)";
+                    (e.currentTarget as HTMLElement).style.borderColor = "#C4985A";
+                    (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = "transparent";
+                    (e.currentTarget as HTMLElement).style.borderColor = "rgba(196, 152, 90, 0.3)";
+                    (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
+                  }}
+                >
+                  {chat.icon}
+                  {chat.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* Col 4 — Newsletter */}
           <Newsletter />

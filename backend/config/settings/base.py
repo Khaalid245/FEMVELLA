@@ -21,10 +21,11 @@ DJANGO_APPS = [
 THIRD_PARTY_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "django_filters",
     "csp",
-    "django_ratelimit",
+    # "django_ratelimit",  # Temporarily disabled
     "axes",
 ]
 
@@ -36,6 +37,8 @@ LOCAL_APPS = [
     "apps.blog",
     "apps.analytics",
     "apps.audit",
+    "apps.search",
+    "apps.contact",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS

@@ -1,6 +1,13 @@
+import json
+import logging
+from pathlib import Path
+
+from django.conf import settings
 from rest_framework import serializers
 from django.db import models
 from .models import Category, Product, ProductImage, ProductColor, ProductSize, ProductVariant
+
+logger = logging.getLogger(__name__)
 
 
 class ProductImageSerializer(serializers.ModelSerializer):
@@ -45,20 +52,67 @@ class ProductSizeSerializer(serializers.ModelSerializer):
 
 class ProductVariantSerializer(serializers.ModelSerializer):
     effective_price = serializers.ReadOnlyField()
-    in_stock = serializers.SerializerMethodField()
+    available_stock = serializers.ReadOnlyField()
+    is_in_stock = serializers.ReadOnlyField()
+    is_low_stock = serializers.ReadOnlyField()
+    stock_status = serializers.ReadOnlyField()
 
     class Meta:
         model = ProductVariant
-        fields = ("id", "size", "color", "stock", "price_override", "effective_price", "in_stock")
+        fields = (
+            "id", "size", "color", "stock", "available_stock", "reserved_stock",
+            "low_stock_threshold", "sku", "price_override", "effective_price", 
+            "is_active", "is_in_stock", "is_low_stock", "stock_status",
+            "total_sold", "last_restocked"
+        )
+        read_only_fields = ('sku', 'total_sold', 'last_restocked')
 
-    def get_in_stock(self, obj):
-        return obj.stock > 0
+
+# Optimized serializer for product list views
+class ProductListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for product list views"""
+    primary_image = serializers.SerializerMethodField()
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    discount_percent = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Product
+        fields = (
+            "id", "name", "slug", "category_name", 
+            "price", "sale_price", "discount_percent",
+            "total_stock", "is_featured", "is_new", "is_bestseller",
+            "primary_image", "created_at"
+        )
+    
+    def get_primary_image(self, obj):
+        # Use prefetched images to avoid additional queries
+        primary_image = None
+        for image in obj.images.all():
+            if image.is_primary:
+                primary_image = image
+                break
+        
+        if not primary_image and obj.images.exists():
+            primary_image = obj.images.first()
+            
+        if primary_image:
+            request = self.context.get("request")
+            if request:
+                return request.build_absolute_uri(primary_image.image.url)
+            return primary_image.image.url
+        return None
+    
+    def get_discount_percent(self, obj):
+        if obj.sale_price and obj.price:
+            discount = ((obj.price - obj.sale_price) / obj.price) * 100
+            return round(discount)
+        return None
 
 
 class ProductSerializer(serializers.ModelSerializer):
     images = ProductImageSerializer(many=True, read_only=True)
     colors = ProductColorSerializer(many=True, read_only=True)
-    sizes = ProductSizeSerializer(many=True, read_only=True)   # legacy
+    sizes = ProductSizeSerializer(many=True, read_only=True)
     variants = ProductVariantSerializer(many=True, read_only=True)
     category = CategorySerializer(read_only=True)
     category_id = serializers.PrimaryKeyRelatedField(
@@ -66,11 +120,6 @@ class ProductSerializer(serializers.ModelSerializer):
     )
     discount_percent = serializers.SerializerMethodField()
     total_stock = serializers.ReadOnlyField()
-    upload_image = serializers.ImageField(write_only=True, required=False)
-    upload_images = serializers.ListField(
-        child=serializers.ImageField(), write_only=True, required=False
-    )
-    variants_data = serializers.CharField(write_only=True, required=False)
 
     class Meta:
         model = Product
@@ -79,7 +128,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "price", "sale_price", "discount_percent",
             "stock", "total_stock",
             "is_active", "is_featured", "is_new", "is_bestseller", "is_customizable",
-            "upload_image", "upload_images", "images", "colors", "sizes", "variants", "variants_data",
+            "images", "colors", "sizes", "variants",
             "created_at", "updated_at",
         )
 
@@ -88,98 +137,3 @@ class ProductSerializer(serializers.ModelSerializer):
             discount = ((obj.price - obj.sale_price) / obj.price) * 100
             return round(discount)
         return None
-
-    def _save_variants(self, product, variants_json):
-        import json
-        try:
-            variants = json.loads(variants_json)
-        except (ValueError, TypeError):
-            return
-        incoming_ids = {int(v["id"]) for v in variants if v.get("id")}
-        product.variants.exclude(pk__in=incoming_ids).delete()
-        for v in variants:
-            size = v.get("size", "").strip()
-            if not size:
-                continue
-            defaults = {
-                "stock": int(v.get("stock") or 0),
-                "color": (v.get("color") or "").strip(),
-                "price_override": v.get("price_override") or None,
-            }
-            if v.get("id"):
-                ProductVariant.objects.filter(pk=int(v["id"]), product=product).update(**defaults)
-            else:
-                ProductVariant.objects.update_or_create(
-                    product=product,
-                    size=size,
-                    color=defaults["color"],
-                    defaults={"stock": defaults["stock"], "price_override": defaults["price_override"]},
-                )
-
-    def create(self, validated_data):
-        image = validated_data.pop("upload_image", None)
-        images = validated_data.pop("upload_images", [])
-        variants_json = validated_data.pop("variants_data", None)
-        product = super().create(validated_data)
-        
-        # Handle single image upload (backward compatibility)
-        if image:
-            ProductImage.objects.create(product=product, image=image, is_primary=True, sort_order=0)
-        
-        # Handle multiple image uploads
-        for i, img in enumerate(images):
-            is_primary = (i == 0 and not image)  # First image is primary if no single image
-            sort_order = i + (1 if image else 0)  # Offset if single image exists
-            ProductImage.objects.create(
-                product=product, 
-                image=img, 
-                is_primary=is_primary, 
-                sort_order=sort_order
-            )
-        
-        if variants_json:
-            self._save_variants(product, variants_json)
-        return product
-
-    def update(self, instance, validated_data):
-        print(f"ProductSerializer.update called with data: {list(validated_data.keys())}")
-        
-        image = validated_data.pop("upload_image", None)
-        images = validated_data.pop("upload_images", [])
-        variants_json = validated_data.pop("variants_data", None)
-        
-        print(f"Image data: upload_image={image}, upload_images={len(images)} files")
-        
-        product = super().update(instance, validated_data)
-        
-        # Handle single image upload (replace primary)
-        if image:
-            print(f"Processing single image upload: {image}")
-            ProductImage.objects.filter(product=product, is_primary=True).delete()
-            ProductImage.objects.create(product=product, image=image, is_primary=True, sort_order=0)
-        
-        # Handle multiple image uploads (add to existing)
-        if images:
-            print(f"Processing {len(images)} image uploads")
-            # Get the highest sort_order to append new images
-            max_sort_order = ProductImage.objects.filter(product=product).aggregate(
-                max_order=models.Max('sort_order')
-            )['max_order'] or -1
-            
-            for i, img in enumerate(images):
-                sort_order = max_sort_order + i + 1
-                # Set as primary if no existing primary image
-                is_primary = not ProductImage.objects.filter(product=product, is_primary=True).exists() and i == 0
-                print(f"Creating image {i+1}: sort_order={sort_order}, is_primary={is_primary}")
-                ProductImage.objects.create(
-                    product=product, 
-                    image=img, 
-                    is_primary=is_primary, 
-                    sort_order=sort_order
-                )
-        
-        if variants_json:
-            self._save_variants(product, variants_json)
-        
-        print(f"Update completed. Product now has {product.images.count()} images")
-        return product

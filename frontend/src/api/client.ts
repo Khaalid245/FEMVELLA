@@ -1,8 +1,13 @@
 import axios from "axios";
 import { useAuthStore } from "@/store/authStore";
 
+const rawApiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+const trimmedApiUrl = rawApiUrl.replace(/\/+$/, "");
+export const API_BASE_URL = trimmedApiUrl.endsWith("/api") ? trimmedApiUrl : `${trimmedApiUrl}/api`;
+export const MEDIA_BASE_URL = API_BASE_URL.replace(/\/api$/, "");
+
 const api = axios.create({ 
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000/api" 
+  baseURL: API_BASE_URL
 });
 
 api.interceptors.request.use((config) => {
@@ -19,7 +24,7 @@ api.interceptors.response.use(
       original._retry = true;
       try {
         const refresh = useAuthStore.getState().refreshToken;
-        const { data } = await axios.post(`${import.meta.env.VITE_API_URL || "http://localhost:8000/api"}/auth/token/refresh/`, { refresh });
+        const { data } = await axios.post(`${API_BASE_URL}/auth/token/refresh/`, { refresh });
         useAuthStore.getState().setTokens(data.access, refresh!);
         original.headers.Authorization = `Bearer ${data.access}`;
         return api(original);
