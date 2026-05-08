@@ -66,8 +66,20 @@ export const useProduct = (slug: string) => {
     queryFn: () => api.get<Product>(`/products/${slug}/`).then((r) => r.data),
     enabled: isValidSlug,
     retry: false,
-    staleTime: 1000 * 60 * 10, // 10 minutes cache
-    gcTime: 1000 * 60 * 30, // 30 minutes garbage collection
+    staleTime: 1000 * 60 * 10,
+    gcTime: 1000 * 60 * 30,
+  });
+};
+
+// Public product detail — used by the product detail page
+export const useProductDetail = (slug: string) => {
+  const isValidSlug = !!slug && slug !== 'undefined' && slug !== 'null';
+  return useQuery({
+    queryKey: ["product-detail", slug],
+    queryFn: () => api.get<Product>(`/products/detail/${slug}/`).then((r) => r.data),
+    enabled: isValidSlug,
+    retry: 1,
+    staleTime: 1000 * 60 * 5,
   });
 };
 

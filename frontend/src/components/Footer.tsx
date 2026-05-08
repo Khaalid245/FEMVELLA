@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { openWhatsApp } from "@/utils/whatsapp";
+import { openWhatsApp, isWhatsAppConfigured } from "@/utils/whatsapp";
 
 // ─────────────────────────────────────────────
 // Types
@@ -328,7 +328,8 @@ export default function Footer() {
           <div>
             <FooterColumn title="Support" links={SUPPORT_LINKS} />
             
-            {/* WhatsApp Chat */}
+            {/* WhatsApp Chat — only rendered when VITE_WHATSAPP_NUMBER is configured */}
+            {isWhatsAppConfigured() && (
             <div className="mt-8">
               {CHAT_LINKS.map((chat) => (
                 <button
@@ -363,6 +364,7 @@ export default function Footer() {
                 </button>
               ))}
             </div>
+            )}
           </div>
 
           {/* Col 4 — Newsletter */}

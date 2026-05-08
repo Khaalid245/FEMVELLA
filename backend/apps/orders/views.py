@@ -5,6 +5,7 @@ from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from core.exceptions import PaymentRateThrottle
 from core.permissions import IsOwnerOrReadOnly
 from .models import ExchangeRequest, Order, OrderStatusHistory, Refund, ReturnRequest
 from .operations import (
@@ -72,7 +73,9 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         return qs
 
     # ── Checkout ──────────────────────────────────────────────────────────
-    @action(methods=["post"], detail=False, url_path="checkout")
+    @action(methods=["post"], detail=False, url_path="checkout",
+            permission_classes=[permissions.IsAuthenticated],
+            throttle_classes=[PaymentRateThrottle])
     def checkout(self, request):
         serializer = CreateOrderSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

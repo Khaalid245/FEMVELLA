@@ -25,6 +25,13 @@ class Order(TimeStampedModel):
     shipping_address = models.TextField()
     notes = models.TextField(blank=True)
     idempotency_key = models.CharField(max_length=64, blank=True, default="")
+    # MySQL does not support partial unique indexes, so we use a separate
+    # nullable field that is NULL for blank keys and a copy of idempotency_key
+    # otherwise. A standard unique_together on (user, idempotency_key_unique)
+    # then enforces the constraint only for non-blank keys.
+    idempotency_key_unique = models.CharField(
+        max_length=64, null=True, blank=True, default=None
+    )
 
     # Fulfillment
     tracking_number = models.CharField(max_length=100, blank=True, default="")
@@ -42,6 +49,10 @@ class Order(TimeStampedModel):
             models.Index(fields=["created_at"], name="order_created_at_idx"),
             models.Index(fields=["status", "created_at"], name="order_status_created_idx"),
         ]
+        # MySQL allows multiple NULLs in a unique index, so NULL values
+        # (blank idempotency keys) never collide. Only non-NULL values
+        # (real checkout keys) are enforced as unique per user.
+        unique_together = [("user", "idempotency_key_unique")]
 
     def __str__(self):
         return f"Order #{self.pk} - {self.user.email}"

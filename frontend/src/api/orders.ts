@@ -16,7 +16,6 @@ export interface Order {
   total_price: string;
   shipping_address: string;
   notes: string;
-  idempotency_key: string;
   items: OrderItem[];
   created_at: string;
 }

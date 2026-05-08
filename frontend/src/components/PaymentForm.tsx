@@ -48,9 +48,11 @@ export default function PaymentForm({ onSubmit, isSubmitting, error }: PaymentFo
         <div className="border border-gray-200 rounded-lg px-4 py-3.5 focus-within:ring-2 focus-within:ring-brand-500">
           <CardElement options={CARD_ELEMENT_OPTIONS} />
         </div>
-        <p className="text-xs text-gray-400 mt-2">
-          Test card: 4242 4242 4242 4242 · Any future date · Any CVC
-        </p>
+        {import.meta.env.DEV && (
+          <p className="text-xs text-gray-400 mt-2">
+            Test card: 4242 4242 4242 4242 · Any future date · Any CVC
+          </p>
+        )}
       </div>
 
       {error && (

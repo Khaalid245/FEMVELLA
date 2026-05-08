@@ -28,14 +28,23 @@ def handle_order_created(sender, instance, created, **kwargs):
         
         logger.info(f"Order emails queued for order {instance.id}")
     
-    # Send payment confirmation when order is paid
-    elif instance.status == 'paid' and 'status' in kwargs.get('update_fields', []):
-        send_payment_confirmation_email.delay(
-            order_id=instance.id,
-            user_email=instance.user.email
-        )
-        
-        logger.info(f"Payment confirmation email queued for order {instance.id}")
+    # Send payment confirmation when order transitions to PAID.
+    # update_fields is a frozenset when present, None when absent.
+    # We check: (1) status is now 'paid', (2) update_fields exists,
+    # (3) 'status' is in update_fields — this ensures we only fire on
+    # explicit status updates, not on unrelated field changes.
+    else:
+        update_fields = kwargs.get('update_fields')
+        if (
+            instance.status == Order.Status.PAID
+            and update_fields is not None
+            and 'status' in update_fields
+        ):
+            send_payment_confirmation_email.delay(
+                order_id=instance.id,
+                user_email=instance.user.email
+            )
+            logger.info(f"Payment confirmation email queued for order {instance.id}")
 
 
 @receiver(post_save, sender=ProductVariant)

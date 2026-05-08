@@ -10,7 +10,11 @@ export function initSentry() {
     release: import.meta.env.VITE_RELEASE_VERSION,
     integrations: [
       Sentry.browserTracingIntegration(),
-      Sentry.replayIntegration({ maskAllText: false, blockAllMedia: false }),
+      // maskAllText: true  — masks all text content in replays, protecting customer PII
+      //   (names, addresses, email inputs, checkout fields).
+      // blockAllMedia: false — product images are not PII; keeping them unblocked
+      //   preserves visual context needed to diagnose UI bugs.
+      Sentry.replayIntegration({ maskAllText: true, blockAllMedia: false }),
     ],
     tracesSampleRate: 0.1,
     replaysSessionSampleRate: 0.05,

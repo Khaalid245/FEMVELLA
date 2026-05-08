@@ -79,7 +79,8 @@ MAX_PRODUCT_IMAGE_COUNT = env.int('MAX_PRODUCT_IMAGE_COUNT', default=5)
 
 # API Security
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[])
+# Do NOT re-read CORS_ALLOWED_ORIGINS here — base.py already loaded it from .env.
+# Overwriting it here with a fresh env.list() call loses the value in dev.
 CORS_ALLOW_ALL_ORIGINS = False
 
 # JWT Security

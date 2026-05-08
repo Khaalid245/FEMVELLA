@@ -83,6 +83,10 @@ def create_order_from_cart(
 
         _validate_cart(cart_items, all_products, locked_variants)
 
+        # Inner savepoint: stock writes + order insert are one atomic unit.
+        # If the unique constraint fires (concurrent duplicate), the savepoint
+        # rolls back cleanly — stock deductions are undone — and the outer
+        # transaction remains usable so we can query the existing order.
         try:
             with transaction.atomic():
                 total = Decimal("0.00")
@@ -124,6 +128,9 @@ def create_order_from_cart(
                     shipping_address=shipping_address,
                     notes=notes,
                     idempotency_key=idempotency_key,
+                    # NULL for blank keys so MySQL unique index allows multiples;
+                    # set to the key value for real checkouts to enforce uniqueness.
+                    idempotency_key_unique=idempotency_key or None,
                 )
 
                 OrderItem.objects.bulk_create([
@@ -142,12 +149,20 @@ def create_order_from_cart(
                 ])
 
         except IntegrityError:
+            # Only the unique_user_idempotency_key constraint produces a
+            # recoverable IntegrityError here. Any other integrity violation
+            # (e.g. FK, NOT NULL) must still propagate.
             if not idempotency_key:
                 raise
-            existing = (
-                Order.objects.prefetch_related("items__product", "items__variant")
-                .get(user=user, idempotency_key=idempotency_key)
-            )
+            try:
+                existing = (
+                    Order.objects.prefetch_related("items__product", "items__variant")
+                    .get(user=user, idempotency_key=idempotency_key)
+                )
+            except Order.DoesNotExist:
+                # Constraint fired but the row is gone — should never happen;
+                # re-raise the original error so it surfaces rather than silently failing.
+                raise
             return existing, False
 
     return (

@@ -43,4 +43,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'apps.analytics.tasks.update_search_analytics',
         'schedule': crontab(hour=4, minute=0),
     },
+
+    # Update live exchange rates every hour
+    'update-exchange-rates': {
+        'task': 'apps.currency.tasks.update_exchange_rates',
+        'schedule': crontab(minute=0),  # top of every hour
+    },
 }

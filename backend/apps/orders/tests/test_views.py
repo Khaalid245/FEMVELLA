@@ -220,3 +220,91 @@ def test_idempotency_key_in_response(auth_client, product):
 
     assert res.status_code == 201
     assert res.json()["idempotency_key"] == key
+
+
+# ---------------------------------------------------------------------------
+# Rate limiting — PaymentRateThrottle (20/minute)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_checkout_throttle_allows_normal_requests(auth_client, product):
+    """Authenticated users can make normal checkout requests within limit."""
+    payload = {
+        "items": [{"product_id": product.pk, "quantity": 1}],
+        "shipping_address": "123 Main St, Riyadh",
+    }
+    
+    res = auth_client.post(CHECKOUT_URL, payload, format="json")
+    assert res.status_code == 201
+    assert "id" in res.json()
+
+
+@pytest.mark.django_db
+def test_checkout_throttle_blocks_excessive_requests(auth_client, product):
+    """Excessive checkout requests are throttled (429 Too Many Requests)."""
+    payload = {
+        "items": [{"product_id": product.pk, "quantity": 1}],
+        "shipping_address": "123 Main St, Riyadh",
+    }
+    
+    for i in range(21):
+        res = auth_client.post(CHECKOUT_URL, payload, format="json")
+        
+        if i < 20:
+            assert res.status_code in [201, 409]
+        else:
+            assert res.status_code == 429
+            data = res.json()
+            assert "detail" in data or "error" in data
+
+
+@pytest.mark.django_db
+def test_checkout_throttle_returns_proper_response(auth_client, product):
+    """Throttled response includes proper DRF error format."""
+    payload = {
+        "items": [{"product_id": product.pk, "quantity": 1}],
+        "shipping_address": "123 Main St, Riyadh",
+    }
+    
+    for _ in range(21):
+        res = auth_client.post(CHECKOUT_URL, payload, format="json")
+        if res.status_code == 429:
+            break
+    
+    assert res.status_code == 429
+    data = res.json()
+    assert "detail" in data or "error" in data
+
+
+@pytest.mark.django_db
+def test_checkout_throttle_per_user(api_client, user, product):
+    """Rate limit is per-user, not global."""
+    user2 = User.objects.create_user(
+        username="buyer2", email="buyer2@femvelle.com", password="pass1234"
+    )
+    
+    payload = {
+        "items": [{"product_id": product.pk, "quantity": 1}],
+        "shipping_address": "123 Main St, Riyadh",
+    }
+    
+    api_client.force_authenticate(user=user)
+    for _ in range(5):
+        res = api_client.post(CHECKOUT_URL, payload, format="json")
+        assert res.status_code in [201, 409]
+    
+    api_client.force_authenticate(user=user2)
+    res = api_client.post(CHECKOUT_URL, payload, format="json")
+    assert res.status_code in [201, 409]
+
+
+@pytest.mark.django_db
+def test_checkout_throttle_unauthenticated_blocked(api_client, product):
+    """Unauthenticated users cannot access checkout."""
+    payload = {
+        "items": [{"product_id": product.pk, "quantity": 1}],
+        "shipping_address": "123 Main St, Riyadh",
+    }
+    
+    res = api_client.post(CHECKOUT_URL, payload, format="json")
+    assert res.status_code == 401

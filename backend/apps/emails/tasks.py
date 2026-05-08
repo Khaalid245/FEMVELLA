@@ -13,73 +13,82 @@ logger = logging.getLogger(__name__)
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def send_transactional_email(self, email_log_id):
-    """Send transactional email with retry logic"""
+    """Send transactional email with retry logic."""
+    # Fetch the log record first so the except block can always reference it.
     try:
         email_log = EmailLog.objects.get(id=email_log_id)
-        
-        # Get template
+    except EmailLog.DoesNotExist:
+        logger.error("send_transactional_email: EmailLog %s not found", email_log_id)
+        return False
+
+    try:
         try:
             template = EmailTemplate.objects.get(
                 template_type=email_log.template_type,
-                is_active=True
+                is_active=True,
             )
         except EmailTemplate.DoesNotExist:
             email_log.status = 'failed'
             email_log.error_message = f"Template not found: {email_log.template_type}"
-            email_log.save()
-            logger.error(f"Email template not found: {email_log.template_type}")
+            email_log.save(update_fields=['status', 'error_message'])
+            logger.error(
+                "send_transactional_email: template '%s' not found for log %s",
+                email_log.template_type, email_log_id,
+            )
             return False
 
-        # Render email content
-        context = email_log.context_data
+        context = dict(email_log.context_data)  # copy — never mutate the stored JSON
         context.update({
             'site_name': 'Femvelle',
             'site_url': getattr(settings, 'FRONTEND_URL', 'https://femvelle.com'),
             'support_email': getattr(settings, 'DEFAULT_FROM_EMAIL', 'support@femvelle.com'),
         })
 
-        # Render HTML content
         html_content = render_to_string('emails/base.html', {
             'content': template.html_content,
-            **context
+            **context,
         })
 
-        # Create email
         email = EmailMultiAlternatives(
-            subject=template.subject.format(**context),
-            body=template.text_content.format(**context) if template.text_content else '',
+            subject=template.subject,
+            body=template.text_content or '',
             from_email=settings.DEFAULT_FROM_EMAIL,
             to=[email_log.recipient_email],
         )
-        
         if html_content:
-            email.attach_alternative(html_content, "text/html")
+            email.attach_alternative(html_content, 'text/html')
 
-        # Send email
         email.send()
-        
-        # Update log
+
         email_log.status = 'sent'
         email_log.sent_at = timezone.now()
-        email_log.save()
-        
-        logger.info(f"Email sent successfully: {email_log_id}")
+        email_log.save(update_fields=['status', 'sent_at'])
+        logger.info("Email sent: log=%s type=%s to=%s",
+                    email_log_id, email_log.template_type, email_log.recipient_email)
         return True
 
     except Exception as exc:
         email_log.retry_count += 1
         email_log.error_message = str(exc)
-        
-        if email_log.can_retry:
+
+        # can_retry checks status == 'failed', but status hasn't been set yet
+        # here — check retry budget directly instead.
+        if email_log.retry_count <= email_log.max_retries:
             email_log.status = 'retry'
-            email_log.save()
-            logger.warning(f"Email failed, retrying: {email_log_id} - {exc}")
+            email_log.save(update_fields=['status', 'retry_count', 'error_message'])
+            logger.warning(
+                "Email failed, scheduling retry %d/%d: log=%s error=%s",
+                email_log.retry_count, email_log.max_retries, email_log_id, exc,
+            )
             raise self.retry(exc=exc)
-        else:
-            email_log.status = 'failed'
-            email_log.save()
-            logger.error(f"Email failed permanently: {email_log_id} - {exc}")
-            return False
+
+        email_log.status = 'failed'
+        email_log.save(update_fields=['status', 'retry_count', 'error_message'])
+        logger.error(
+            "Email failed permanently: log=%s type=%s error=%s",
+            email_log_id, email_log.template_type, exc,
+        )
+        return False
 
 
 @shared_task
@@ -88,30 +97,32 @@ def send_order_confirmation_email(order_id, user_email):
     from apps.orders.models import Order
     
     try:
-        order = Order.objects.select_related('user', 'shipping_address').get(id=order_id)
+        order = Order.objects.select_related('user').prefetch_related('items__product').get(id=order_id)
+        
+        # Build items list for email
+        items = [
+            {
+                'name': item.product.name if item.product else 'Product',
+                'quantity': item.quantity,
+                'unit_price': float(item.unit_price),
+                'subtotal': float(item.subtotal),
+            }
+            for item in order.items.all()
+        ]
         
         context = {
             'order': {
                 'id': order.id,
                 'order_number': order.order_number,
-                'total': float(order.total),
-                'subtotal': float(order.subtotal),
-                'shipping_cost': float(order.shipping_cost),
+                'total_price': float(order.total_price),
+                'items': items,
                 'created_at': order.created_at.strftime('%B %d, %Y'),
             },
             'user': {
-                'first_name': order.user.first_name,
-                'last_name': order.user.last_name,
+                'first_name': order.user.first_name or order.user.username,
+                'last_name': order.user.last_name or '',
             },
-            'shipping_address': {
-                'full_name': f"{order.shipping_address.first_name} {order.shipping_address.last_name}",
-                'address_line_1': order.shipping_address.address_line_1,
-                'address_line_2': order.shipping_address.address_line_2,
-                'city': order.shipping_address.city,
-                'state': order.shipping_address.state,
-                'postal_code': order.shipping_address.postal_code,
-                'country': order.shipping_address.country,
-            } if order.shipping_address else None,
+            'shipping_address': order.shipping_address,
         }
         
         email_log = EmailLog.objects.create(
@@ -140,11 +151,11 @@ def send_payment_confirmation_email(order_id, user_email):
             'order': {
                 'id': order.id,
                 'order_number': order.order_number,
-                'total': float(order.total),
-                'payment_method': 'Credit Card',  # Can be enhanced
+                'total_price': float(order.total_price),
+                'payment_method': 'Credit Card',
             },
             'user': {
-                'first_name': order.user.first_name,
+                'first_name': order.user.first_name or order.user.username,
             },
         }
         
@@ -164,22 +175,24 @@ def send_payment_confirmation_email(order_id, user_email):
 
 @shared_task
 def send_shipping_update_email(order_id, tracking_number=None):
-    """Send shipping update email"""
+    """Send shipping update email."""
     from apps.orders.models import Order
-    
+
     try:
         order = Order.objects.select_related('user').get(id=order_id)
-        
+
         context = {
             'order': {
                 'order_number': order.order_number,
-                'tracking_number': tracking_number,
+                'tracking_number': tracking_number or '',
+                'tracking_url': order.tracking_url,
+                'carrier': order.carrier,
             },
             'user': {
-                'first_name': order.user.first_name,
+                'first_name': order.user.first_name or order.user.username,
             },
         }
-        
+
         email_log = EmailLog.objects.create(
             template_type='shipping_update',
             recipient_email=order.user.email,
@@ -187,11 +200,11 @@ def send_shipping_update_email(order_id, tracking_number=None):
             subject=f"Your Order #{order.order_number} Has Shipped",
             context_data=context,
         )
-        
+
         send_transactional_email.delay(str(email_log.id))
-        
-    except Exception as e:
-        logger.error(f"Failed to create shipping update email: {e}")
+
+    except Exception as exc:
+        logger.error("Failed to create shipping update email for order %s: %s", order_id, exc)
 
 
 @shared_task
@@ -207,8 +220,8 @@ def send_admin_new_order_alert(order_id):
             'order': {
                 'id': order.id,
                 'order_number': order.order_number,
-                'total': float(order.total),
-                'customer_name': f"{order.user.first_name} {order.user.last_name}",
+                'total_price': float(order.total_price),
+                'customer_name': f"{order.user.first_name} {order.user.last_name}".strip() or order.user.username,
                 'customer_email': order.user.email,
                 'created_at': order.created_at.strftime('%B %d, %Y at %I:%M %p'),
             },
@@ -218,7 +231,7 @@ def send_admin_new_order_alert(order_id):
             email_log = EmailLog.objects.create(
                 template_type='new_order_admin',
                 recipient_email=admin_email,
-                subject=f"New Order #{order.order_number} - ${order.total}",
+                subject=f"New Order #{order.order_number} - ${order.total_price}",
                 context_data=context,
             )
             

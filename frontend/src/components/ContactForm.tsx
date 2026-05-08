@@ -155,7 +155,6 @@ export default function ContactForm({ onSuccess, onError }: ContactFormProps) {
             type="text"
             value={formData.name}
             onChange={(e) => handleInputChange("name", e.target.value)}
-            onBlur={() => handleBlur("name")}
             style={{
               ...inputStyle,
               borderBottomColor: errors.name && touched.name ? "#E57373" : 
@@ -194,7 +193,6 @@ export default function ContactForm({ onSuccess, onError }: ContactFormProps) {
             type="email"
             value={formData.email}
             onChange={(e) => handleInputChange("email", e.target.value)}
-            onBlur={() => handleBlur("email")}
             style={{
               ...inputStyle,
               borderBottomColor: errors.email && touched.email ? "#E57373" : 
@@ -232,7 +230,6 @@ export default function ContactForm({ onSuccess, onError }: ContactFormProps) {
           <textarea
             value={formData.message}
             onChange={(e) => handleInputChange("message", e.target.value)}
-            onBlur={() => handleBlur("message")}
             rows={5}
             style={{
               ...inputStyle,

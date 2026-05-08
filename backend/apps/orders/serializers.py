@@ -101,7 +101,7 @@ class OrderOutputSerializer(serializers.ModelSerializer):
         fields = (
             "id", "order_number", "user_email", "status", "total_price",
             "refunded_amount", "balance_due",
-            "shipping_address", "notes", "idempotency_key",
+            "shipping_address", "notes",
             "tracking_number", "carrier", "tracking_url",
             "shipped_at", "delivered_at",
             "items", "created_at",

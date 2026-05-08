@@ -5,8 +5,10 @@ from sentry_sdk.integrations.celery import CeleryIntegration
 from sentry_sdk.integrations.redis import RedisIntegration
 from config.tracing import configure_tracing
 
-# Security
+# Hard-enforce DEBUG=False in production — never allow accidental debug mode
 DEBUG = False
+assert not DEBUG, "DEBUG must be False in production"
+
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['femvelle.com', 'www.femvelle.com', 'api.femvelle.com'])
 
 # Database

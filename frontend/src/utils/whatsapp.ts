@@ -2,35 +2,41 @@
  * WhatsApp integration utilities for Femvelle
  */
 
-const WHATSAPP_NUMBER = import.meta.env.VITE_WHATSAPP_NUMBER || '917609958608';
+const WHATSAPP_NUMBER = import.meta.env.VITE_WHATSAPP_NUMBER || '';
 const DEFAULT_MESSAGE = "Hello Femvelle, I would like assistance with your collection.";
 
+/** True only when a number is configured — use to conditionally render CTAs. */
+export const isWhatsAppConfigured = (): boolean => WHATSAPP_NUMBER.length > 0;
+
 /**
- * Generate WhatsApp URL with prefilled message
+ * Generate WhatsApp URL with prefilled message.
+ * Returns null when no number is configured so callers can skip rendering.
  */
-export const generateWhatsAppURL = (message: string = DEFAULT_MESSAGE): string => {
-  const encodedMessage = encodeURIComponent(message);
-  return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodedMessage}`;
+export const generateWhatsAppURL = (message: string = DEFAULT_MESSAGE): string | null => {
+  if (!isWhatsAppConfigured()) return null;
+  return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
 };
 
 /**
- * Open WhatsApp in new tab with prefilled message
+ * Open WhatsApp in new tab with prefilled message.
+ * No-op when number is not configured.
  */
 export const openWhatsApp = (message?: string): void => {
   const url = generateWhatsAppURL(message);
+  if (!url) return;
   window.open(url, '_blank', 'noopener,noreferrer');
 };
 
 /**
- * Get formatted WhatsApp number for display
+ * Get formatted WhatsApp number for display.
+ * Returns empty string when not configured.
  */
 export const getFormattedWhatsAppNumber = (): string => {
-  // Format: +91 76099 58608
-  const number = WHATSAPP_NUMBER;
-  if (number.startsWith('91')) {
-    return `+91 ${number.slice(2, 7)} ${number.slice(7)}`;
+  if (!isWhatsAppConfigured()) return '';
+  if (WHATSAPP_NUMBER.startsWith('91') && WHATSAPP_NUMBER.length === 12) {
+    return `+91 ${WHATSAPP_NUMBER.slice(2, 7)} ${WHATSAPP_NUMBER.slice(7)}`;
   }
-  return `+${number}`;
+  return `+${WHATSAPP_NUMBER}`;
 };
 
 export { WHATSAPP_NUMBER, DEFAULT_MESSAGE };

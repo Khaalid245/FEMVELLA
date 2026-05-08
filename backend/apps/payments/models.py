@@ -16,7 +16,6 @@ class Payment(TimeStampedModel):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     provider = models.CharField(max_length=50, default="stripe")
-    # Stripe PaymentIntent id — pi_xxxx. Unique per payment, blank until created.
     stripe_payment_intent_id = models.CharField(max_length=255, unique=True, blank=True, default="")
 
     class Meta:
@@ -26,3 +25,16 @@ class Payment(TimeStampedModel):
 
     def __str__(self):
         return f"Payment {self.pk} - {self.status}"
+
+
+class ProcessedWebhookEvent(models.Model):
+    """Deduplication table — prevents double-processing Stripe webhook events."""
+    stripe_event_id = models.CharField(max_length=255, unique=True)
+    event_type = models.CharField(max_length=100)
+    processed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["stripe_event_id"])]
+
+    def __str__(self):
+        return f"{self.event_type} — {self.stripe_event_id}"

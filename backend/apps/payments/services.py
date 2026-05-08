@@ -5,7 +5,7 @@ import stripe
 
 from apps.orders.models import Order
 from .exceptions import OrderNotFoundError, OrderNotPayableError, StripeGatewayError
-from .models import Payment
+from .models import Payment, ProcessedWebhookEvent
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +106,15 @@ def handle_webhook(payload: bytes, sig_header: str) -> None:
 
     event_type = event["type"]
     intent = event["data"]["object"]
+
+    # Deduplicate — if we've already processed this event, ack and return
+    _, created = ProcessedWebhookEvent.objects.get_or_create(
+        stripe_event_id=event["id"],
+        defaults={"event_type": event_type},
+    )
+    if not created:
+        logger.info("Duplicate Stripe event %s ignored", event["id"])
+        return
 
     if event_type == "payment_intent.succeeded":
         _handle_payment_succeeded(intent)

@@ -10,7 +10,7 @@ import AdminProductsPage from "@/admin/AdminProductsPage";
 import AdminEditProductPage from "@/admin/AdminEditProductPage";
 import HomePage from "@/pages/HomePage";
 import ShopPage from "@/pages/ShopPage";
-import ProductDetailPageSimple from "@/pages/ProductDetailPageSimple";
+import ProductDetailPage from "@/pages/ProductDetailPage";
 import CartPage from "@/pages/CartPage";
 import { WishlistPage } from "@/pages/WishlistPage";
 import ContactPage from "@/pages/ContactPage";
@@ -57,7 +57,7 @@ export default function App() {
         {/* Public */}
         <Route path="/" element={<HomePage />} />
         <Route path="/products" element={<ShopPage />} />
-        <Route path="/products/:slug" element={<ProductDetailPageSimple />} />
+        <Route path="/products/:slug" element={<ProductDetailPage />} />
         <Route path="/cart" element={<CartPage />} />
         <Route path="/wishlist" element={<ProtectedRoute><WishlistPage /></ProtectedRoute>} />
         <Route path="/contact" element={<ContactPage />} />

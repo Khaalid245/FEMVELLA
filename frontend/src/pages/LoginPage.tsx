@@ -65,7 +65,7 @@ export default function LoginPage() {
         </form>
         <p className="text-center text-sm text-gray-500 mt-6">
           Don't have an account?{" "}
-          <Link to="/register" className="text-brand-600 hover:underline">
+          <Link to="/register" state={location.state} className="text-brand-600 hover:underline">
             Register
           </Link>
         </p>
