@@ -128,3 +128,8 @@ volumes:
 networks:
   femvelle_staging:
     driver: bridge
+
+# To add the full observability stack to staging, run:
+#   docker compose -f docker-compose.staging.yml \
+#     -f docker-compose.monitoring.yml up -d
+# Set MONITORING_NETWORK=femvelle_staging in your env.

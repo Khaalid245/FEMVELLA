@@ -4,8 +4,10 @@ from django.conf.urls.static import static
 from rest_framework_simplejwt.views import TokenRefreshView
 from config.token import EmailTokenObtainPairView
 from django.contrib import admin
+from core.health import health_check
 
 urlpatterns = [
+    path("health/", health_check, name="health-check"),
     path("admin/", admin.site.urls),
     path("api/auth/token/", EmailTokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/auth/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
@@ -22,6 +24,10 @@ urlpatterns = [
     path("api/search/", include("apps.search.urls")),
     # Feature flags
     path("api/feature-flags/", include("core.feature_flag_urls")),
+    # CMS
+    path("api/cms/", include("apps.cms.urls")),
+    # Currency
+    path("api/currency/", include("apps.currency.urls")),
     # SEO URLs (at root level)
     path("", include("apps.seo.urls")),
     # path("api/audit/", include("apps.audit.urls")),  # Temporarily disabled

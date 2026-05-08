@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from apps.products.models import Product, ProductVariant
@@ -223,5 +225,3 @@ class AddTrackingSerializer(serializers.Serializer):
     carrier         = serializers.CharField(max_length=50)
     tracking_url    = serializers.URLField(required=False, allow_blank=True, default="")
 
-
-from decimal import Decimal  # noqa: E402 — needed for RefundRequestSerializer

@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { api } from './client';
+import api from './client';
 
 export interface CartItem {
   id: number;

@@ -71,7 +71,7 @@ class ShippingRuleInline(admin.TabularInline):
 
 @admin.register(ShippingRule)
 class ShippingRuleAdmin(admin.ModelAdmin):
-    list_display = ['zone', 'method', 'condition_type', 'price_display', 'free_threshold', 'active_status', 'priority']
+    list_display = ['zone', 'method', 'condition_type', 'price_display', 'free_threshold', 'active_status', 'priority', 'is_active']
     list_filter = ['condition_type', 'is_active', 'zone', 'method__carrier']
     search_fields = ['zone__name', 'method__name']
     list_editable = ['priority', 'is_active']

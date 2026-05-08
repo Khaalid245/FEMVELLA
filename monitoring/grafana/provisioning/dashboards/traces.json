@@ -1,0 +1,43 @@
+{
+  "title": "Femvelle — Distributed Traces",
+  "uid": "femvelle-traces",
+  "tags": ["femvelle", "tracing"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Service Map",
+      "type": "nodeGraph",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 10 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [{ "queryType": "serviceMap" }]
+    },
+    {
+      "id": 2,
+      "title": "Trace Search",
+      "type": "table",
+      "gridPos": { "x": 0, "y": 10, "w": 24, "h": 10 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [{
+        "queryType": "traceql",
+        "query": "{ duration > 500ms }",
+        "limit": 20
+      }],
+      "options": { "sortBy": [{ "displayName": "Duration", "desc": true }] }
+    },
+    {
+      "id": 3,
+      "title": "P95 Trace Duration by Service",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 20, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{
+        "expr": "histogram_quantile(0.95, sum(rate(traces_spanmetrics_duration_seconds_bucket[5m])) by (le, service_name))",
+        "legendFormat": "{{ service_name }} P95"
+      }],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    }
+  ]
+}

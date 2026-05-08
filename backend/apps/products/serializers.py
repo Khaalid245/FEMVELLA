@@ -6,6 +6,7 @@ from django.conf import settings
 from rest_framework import serializers
 from django.db import models
 from .models import Category, Product, ProductImage, ProductColor, ProductSize, ProductVariant
+from apps.currency.serializers import CurrencyPriceMixin
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 
 
 # Optimized serializer for product list views
-class ProductListSerializer(serializers.ModelSerializer):
+class ProductListSerializer(CurrencyPriceMixin, serializers.ModelSerializer):
     """Lightweight serializer for product list views"""
     primary_image = serializers.SerializerMethodField()
     category_name = serializers.CharField(source='category.name', read_only=True)
@@ -109,7 +110,7 @@ class ProductListSerializer(serializers.ModelSerializer):
         return None
 
 
-class ProductSerializer(serializers.ModelSerializer):
+class ProductSerializer(CurrencyPriceMixin, serializers.ModelSerializer):
     images = ProductImageSerializer(many=True, read_only=True)
     colors = ProductColorSerializer(many=True, read_only=True)
     sizes = ProductSizeSerializer(many=True, read_only=True)

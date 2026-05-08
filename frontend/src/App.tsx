@@ -25,6 +25,8 @@ import OrderSuccessPage from "@/pages/OrderSuccessPage";
 import OrderFailedPage from "@/pages/OrderFailedPage";
 import { useAuthStore } from "@/store/authStore";
 import api from "@/api/client";
+import { SearchProvider } from "@/contexts/SearchContext";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 export default function App() {
   const { accessToken, user, setUser, logout } = useAuthStore();
@@ -40,7 +42,16 @@ export default function App() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
+    <ErrorBoundary section="app" fallback={
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", fontFamily: "'Inter', sans-serif", color: "#6B5B55" }}>
+        <div style={{ textAlign: "center" }}>
+          <p style={{ fontSize: "22px", fontFamily: "'Cormorant Garamond', serif", marginBottom: "12px" }}>Femvelle</p>
+          <p style={{ fontSize: "13px" }}>Something went wrong. Please refresh the page.</p>
+        </div>
+      </div>
+    }>
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <SearchProvider>
       <ToastContainer />
       <Routes>
         {/* Public */}
@@ -71,6 +82,8 @@ export default function App() {
         {/* Catch-all route - redirect to products page */}
         <Route path="*" element={<Navigate to="/products" replace />} />
       </Routes>
+      </SearchProvider>
     </BrowserRouter>
+    </ErrorBoundary>
   );
 }

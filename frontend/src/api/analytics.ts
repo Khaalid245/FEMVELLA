@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import api from './client';
 
 export interface AnalyticsEvent {
   event_type: string;
@@ -242,50 +242,49 @@ export interface SearchAnalytics {
 class AnalyticsAPI {
   // Event tracking
   async trackEvent(event: AnalyticsEvent): Promise<{ success: boolean; event_id: string }> {
-    const response = await apiClient.post('/analytics/track/', event);
+    const response = await api.post('/analytics/track/', event);
     return response.data;
   }
 
   // Dashboard data
   async getDashboardOverview(days: number = 30): Promise<DashboardOverview> {
-    const response = await apiClient.get(`/analytics/dashboard/?days=${days}`);
+    const response = await api.get(`/analytics/dashboard/?days=${days}`);
     return response.data;
   }
 
   async getRealTimeMetrics(): Promise<RealTimeMetrics> {
-    const response = await apiClient.get('/analytics/realtime/');
+    const response = await api.get('/analytics/realtime/');
     return response.data;
   }
 
   // Detailed analytics
   async getRevenueAnalytics(days: number = 30): Promise<RevenueAnalytics> {
-    const response = await apiClient.get(`/analytics/revenue/?days=${days}`);
+    const response = await api.get(`/analytics/revenue/?days=${days}`);
     return response.data;
   }
 
   async getProductAnalytics(days: number = 30, limit: number = 20): Promise<ProductAnalytics> {
-    const response = await apiClient.get(`/analytics/products/?days=${days}&limit=${limit}`);
+    const response = await api.get(`/analytics/products/?days=${days}&limit=${limit}`);
     return response.data;
   }
 
   async getCustomerAnalytics(): Promise<CustomerAnalytics> {
-    const response = await apiClient.get('/analytics/customers/');
+    const response = await api.get('/analytics/customers/');
     return response.data;
   }
 
   async getConversionAnalytics(days: number = 30): Promise<ConversionAnalytics> {
-    const response = await apiClient.get(`/analytics/conversion/?days=${days}`);
+    const response = await api.get(`/analytics/conversion/?days=${days}`);
     return response.data;
   }
 
   async getAbandonedCartAnalytics(days: number = 30): Promise<AbandonedCartAnalytics> {
-    const response = await apiClient.get(`/analytics/abandoned-carts/?days=${days}`);
+    const response = await api.get(`/analytics/abandoned-carts/?days=${days}`);
     return response.data;
   }
 
   async getSearchAnalytics(days: number = 30): Promise<SearchAnalytics> {
-    const response = await apiClient.get(`/analytics/search/?days=${days}`);
-    return response.data;
+    const response = await api.get(`/analytics/search/?days=${days}`);    return response.data;
   }
 }
 

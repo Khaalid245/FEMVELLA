@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
+import { useHomepageContent } from "@/api/cms";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -15,7 +16,33 @@ const fadeIn = (delay: number) => ({
   transition: { duration: 0.9, delay, ease },
 });
 
+const FALLBACK = {
+  badge_text: "New Season · 2026",
+  title: "Where Modesty",
+  subtitle_italic: "Meets Elegance",
+  subtitle: "Curated modest fashion for the refined woman — abayas, evening wear and tailored sets crafted in our atelier.",
+  cta_label: "Discover Collection",
+  cta_url: "/products",
+  secondary_cta_label: "View Lookbook",
+  secondary_cta_url: "/products?is_featured=true",
+  image: "https://images.unsplash.com/photo-1509631179647-0177331693ae?w=740&q=88&auto=format&fit=crop&crop=top",
+  image_alt: "Femvelle editorial — modest fashion",
+};
+
 export default function HeroSection() {
+  const { data: cms } = useHomepageContent();
+  const banner = cms?.banners?.[0];
+
+  const badge = banner?.badge_text || FALLBACK.badge_text;
+  const title = banner?.title || FALLBACK.title;
+  const subtitle = banner?.subtitle || FALLBACK.subtitle;
+  const ctaLabel = banner?.cta_label || FALLBACK.cta_label;
+  const ctaUrl = banner?.cta_url || FALLBACK.cta_url;
+  const secLabel = banner?.secondary_cta_label || FALLBACK.secondary_cta_label;
+  const secUrl = banner?.secondary_cta_url || FALLBACK.secondary_cta_url;
+  const heroImage = banner?.image || FALLBACK.image;
+  const heroAlt = banner?.image_alt || FALLBACK.image_alt;
+
   return (
     <section
       className="relative w-full overflow-hidden"
@@ -101,7 +128,7 @@ export default function HeroSection() {
                   flexShrink: 0,
                 }}
               />
-              New Season · 2026
+              {badge}
             </span>
           </motion.div>
 
@@ -121,7 +148,7 @@ export default function HeroSection() {
                   marginBottom: "10px", // large spacing between lines
                 }}
               >
-                Where Modesty
+                {title}
               </span>
             </motion.div>
 
@@ -136,10 +163,10 @@ export default function HeroSection() {
                   fontStyle: "italic",
                   lineHeight: 1.08,
                   letterSpacing: "-0.02em",
-                  color: "#C4985A", // gold — spec exact
+                  color: "#C4985A",
                 }}
               >
-                Meets Elegance
+                {banner ? subtitle : FALLBACK.subtitle_italic}
               </span>
             </motion.div>
           </div>
@@ -179,7 +206,7 @@ export default function HeroSection() {
           >
             {/* Primary */}
             <Link
-              to="/products"
+              to={ctaUrl}
               className="group"
               style={{
                 display: "inline-flex",
@@ -218,7 +245,7 @@ export default function HeroSection() {
 
             {/* Secondary */}
             <Link
-              to="/products?is_featured=true"
+              to={secUrl}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -245,7 +272,7 @@ export default function HeroSection() {
                 (e.currentTarget as HTMLElement).style.background = "transparent";
               }}
             >
-              View Lookbook
+              {secLabel}
             </Link>
           </motion.div>
         </div>
@@ -288,8 +315,8 @@ export default function HeroSection() {
               }}
             >
               <img
-                src="https://images.unsplash.com/photo-1509631179647-0177331693ae?w=740&q=88&auto=format&fit=crop&crop=top"
-                alt="Femvelle editorial — modest fashion"
+                src={heroImage}
+                alt={heroAlt}
                 style={{
                   width: "100%",
                   height: "100%",

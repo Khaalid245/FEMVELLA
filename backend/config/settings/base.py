@@ -45,6 +45,8 @@ LOCAL_APPS = [
     "apps.reviews",
     "apps.security",
     "apps.seo",
+    "apps.cms",
+    "apps.currency",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -52,6 +54,7 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
+    "apps.currency.middleware.CurrencyMiddleware",
     "apps.security.middleware.SecurityMiddleware",
     "apps.security.middleware.BruteForceProtectionMiddleware",
     "apps.security.middleware.CSPMiddleware",
@@ -128,6 +131,19 @@ REST_FRAMEWORK = {
     "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",),
     "DEFAULT_PAGINATION_CLASS": "core.pagination.StandardResultsPagination",
     "PAGE_SIZE": 20,
+    # Rate limiting — applied globally, overridable per view
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "60/minute",       # unauthenticated: 60 req/min
+        "user": "300/minute",      # authenticated: 300 req/min
+        "auth": "10/minute",       # login/register: 10 req/min
+        "payment": "20/minute",    # payment endpoints: 20 req/min
+        "search": "30/minute",     # search: 30 req/min
+    },
+    "EXCEPTION_HANDLER": "core.exceptions.custom_exception_handler",
 }
 
 X_FRAME_OPTIONS = "DENY"
@@ -138,6 +154,8 @@ CELERY_BROKER_URL = env("REDIS_URL", default="redis://redis:6379/0")
 CELERY_RESULT_BACKEND = env("REDIS_URL", default="redis://redis:6379/0")
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_EXPIRES = 3600  # 1 hour — prevent Redis memory bloat
+CELERY_TASK_IGNORE_RESULT = False
 
 # ---------------------------------------------------------------------------
 # Security Configuration

@@ -9,7 +9,7 @@ from .tasks import send_transactional_email, retry_failed_emails
 
 @admin.register(EmailTemplate)
 class EmailTemplateAdmin(admin.ModelAdmin):
-    list_display = ['name', 'template_type', 'active_status', 'updated_at']
+    list_display = ['name', 'template_type', 'is_active', 'active_status', 'updated_at']
     list_filter = ['template_type', 'is_active', 'created_at']
     search_fields = ['name', 'subject']
     list_editable = ['is_active']

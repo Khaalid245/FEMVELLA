@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
+from core.exceptions import PaymentRateThrottle
 
 from .models import Payment
 from .serializers import CreatePaymentIntentSerializer
@@ -39,7 +40,8 @@ class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
                           "stripe_payment_intent_id", "created_at")
         return _Out
 
-    @action(methods=["post"], detail=False, url_path="create-intent")
+    @action(methods=["post"], detail=False, url_path="create-intent",
+            throttle_classes=[PaymentRateThrottle])
     def create_intent(self, request):
         """
         POST /api/payments/create-intent/

@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useCartStore } from "@/store/cartStore";
 import { useAuthStore } from "@/store/authStore";
 import { useSearchContext } from "@/contexts/SearchContext";
+import CurrencySwitcher from "@/components/CurrencySwitcher";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -125,6 +126,11 @@ export default function Navbar() {
                   Sign in
                 </Link>
               )}
+            </div>
+
+            {/* Currency Switcher — desktop */}
+            <div className="hidden md:block">
+              <CurrencySwitcher />
             </div>
 
             {/* Search — desktop pill */}

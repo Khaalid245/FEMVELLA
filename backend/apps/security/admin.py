@@ -181,7 +181,7 @@ class DataAccessLogAdmin(admin.ModelAdmin):
 class SecurityIncidentAdmin(admin.ModelAdmin):
     list_display = [
         'incident_id', 'title', 'incident_type', 'severity_display',
-        'status_display', 'assigned_to', 'detected_at'
+        'status', 'status_display', 'assigned_to', 'detected_at'
     ]
     list_filter = [
         'incident_type', 'severity', 'status', 'detected_at'

@@ -16,7 +16,7 @@ class ReviewImageInline(admin.TabularInline):
 @admin.register(Review)
 class ReviewAdmin(admin.ModelAdmin):
     list_display = [
-        'product_name', 'user_email', 'rating_display', 'status_display',
+        'product_name', 'user_email', 'rating_display', 'status', 'status_display',
         'verified_badge', 'helpfulness_score', 'created_at'
     ]
     list_filter = [

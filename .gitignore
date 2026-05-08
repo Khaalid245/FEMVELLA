@@ -20,8 +20,15 @@ staticfiles/
 
 # Env files
 .env
-.env.prod
+.env.*
 !.env.example
+!.env.*.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
 
 # Node
 node_modules/
