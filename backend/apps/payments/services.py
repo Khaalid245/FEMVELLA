@@ -163,6 +163,13 @@ def _handle_payment_succeeded(intent: dict) -> None:
 
     logger.info("Order %s marked PAID via intent %s", order.pk, intent_id)
 
+    # Send confirmation email outside the transaction — non-critical path
+    try:
+        from apps.emails.tasks import send_order_confirmation_email
+        send_order_confirmation_email.delay(order.pk, order.user.email)
+    except Exception as exc:
+        logger.error("Failed to queue confirmation email for order %s: %s", order.pk, exc)
+
 
 def _handle_payment_failed(intent: dict) -> None:
     """

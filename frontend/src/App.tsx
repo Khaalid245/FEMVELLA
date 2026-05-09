@@ -23,18 +23,22 @@ import RegisterPage from "@/pages/RegisterPage";
 import CheckoutPage from "@/pages/CheckoutPage";
 import OrderSuccessPage from "@/pages/OrderSuccessPage";
 import OrderFailedPage from "@/pages/OrderFailedPage";
-import { useAuthStore } from "@/store/authStore";
+import { useAuthStore, isRefreshTokenExpired } from "@/store/authStore";
 import api from "@/api/client";
 import { SearchProvider } from "@/contexts/SearchContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
 export default function App() {
-  const { accessToken, user, setUser, logout } = useAuthStore();
+  const { accessToken, refreshToken, user, setUser, logout } = useAuthStore();
 
-  // On app load: if token exists but user object is missing (e.g. after hard refresh),
-  // re-fetch the profile so AdminRoute has the is_staff flag.
-  // Runs ONCE on mount only — never triggers navigation itself.
+  // On app load: proactively clear stale tokens before making any API call.
+  // If the refresh token is expired, logout immediately — no round-trip needed.
+  // Otherwise, if the user object is missing (e.g. hard refresh), re-fetch profile.
   useEffect(() => {
+    if (isRefreshTokenExpired(refreshToken)) {
+      logout(); // clear any stale tokens unconditionally
+      return;
+    }
     if (accessToken && !user) {
       api.get("/accounts/profile/")
         .then((r) => setUser(r.data))

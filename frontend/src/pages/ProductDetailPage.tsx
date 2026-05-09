@@ -4,6 +4,7 @@ import Layout from "@/components/Layout";
 import ProductImageGallery from "@/components/ProductImageGallery";
 import { useProductDetail } from "@/api/products";
 import { useCartStore } from "@/store/cartStore";
+import { useCurrencyStore } from "@/store/currencyStore";
 import ProductShelf from "@/components/ProductShelf";
 import { useSimilarProducts, useCompleteTheLook } from "@/api/recommendations";
 import { useTrackProductView } from "@/hooks/useTrackProductView";
@@ -31,6 +32,7 @@ export default function ProductDetailPage() {
   const navigate = useNavigate();
   const { data: product, isLoading, isError } = useProductDetail(slug!);
   const addItem = useCartStore((s) => s.addItem);
+  const symbol = useCurrencyStore((s) => s.getSymbol());
 
   // Track product view for recommendations
   useTrackProductView(product?.id);
@@ -118,10 +120,10 @@ export default function ProductDetailPage() {
           {/* Price */}
           <div className="flex items-center gap-3 mb-5">
             <span style={{ fontSize: "24px", fontWeight: 600, color: isOnSale ? "#C4985A" : "#2C2420" }}>
-              ${displayPrice}
+              {symbol}{displayPrice}
             </span>
             {isOnSale && (
-              <span style={{ fontSize: "16px", color: "#9E8E88", textDecoration: "line-through" }}>${product.price}</span>
+              <span style={{ fontSize: "16px", color: "#9E8E88", textDecoration: "line-through" }}>{symbol}{product.price}</span>
             )}
           </div>
 

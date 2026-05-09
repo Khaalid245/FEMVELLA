@@ -76,14 +76,17 @@ class ProductListSerializer(CurrencyPriceMixin, serializers.ModelSerializer):
         )
 
     def get_primary_image(self, obj):
-        primary_image = None
+        # Iterate the prefetched queryset once — avoids a second DB call
+        # when no image is marked is_primary.
+        first = None
         for image in obj.images.all():
+            if first is None:
+                first = image
             if image.is_primary:
                 primary_image = image
                 break
-        if not primary_image:
-            first = list(obj.images.all())
-            primary_image = first[0] if first else None
+        else:
+            primary_image = first
         if primary_image:
             request = self.context.get("request")
             if request:

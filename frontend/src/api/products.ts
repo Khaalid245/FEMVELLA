@@ -1,18 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
+import axios from "axios";
 import api from "./client";
-
-interface ColorOption {
-  id: number;
-  name: string;
-  hex_code: string;
-}
-
-interface ProductImage {
-  id: number;
-  image: string;
-  alt_text?: string;
-  is_primary: boolean;
-}
 
 export interface ProductVariant {
   id: number;
@@ -66,7 +54,11 @@ export const useProductDetail = (slug: string) => {
     queryKey: ["product-detail", slug],
     queryFn: () => api.get<Product>(`/products/detail/${slug}/`).then((r) => r.data),
     enabled: isValidSlug,
-    retry: 1,
+    // Do not retry 4xx responses — a 404 means the product doesn't exist
+    retry: (failureCount, err) =>
+      !axios.isAxiosError(err) || (err.response?.status ?? 500) >= 500
+        ? failureCount < 1
+        : false,
     staleTime: 1000 * 60 * 5,
   });
 };

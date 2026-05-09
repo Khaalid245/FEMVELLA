@@ -31,8 +31,15 @@ export function useCheckout(): CheckoutState {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const clientSecretRef = useRef<string | null>(null);
 
-  // Stable per-session idempotency key — generated once, never changes
-  const idempotencyKey = useRef(uuidv4()).current;
+  // Stable per-session idempotency key — persisted in sessionStorage so a
+  // page refresh within the same tab reuses the same key and the same order.
+  const idempotencyKey = useRef<string>(() => {
+    const stored = sessionStorage.getItem("checkout_idempotency_key");
+    if (stored) return stored;
+    const key = uuidv4();
+    sessionStorage.setItem("checkout_idempotency_key", key);
+    return key;
+  }).current;
 
   const cartItems = useCartStore((s) => s.items);
   const { mutateAsync: createOrder } = useCreateOrder();
@@ -110,17 +117,17 @@ export function useCheckout(): CheckoutState {
 
 function extractErrorMessage(err: unknown): string {
   if (
-    err &&
+    err !== null &&
     typeof err === "object" &&
     "response" in err &&
-    err.response &&
+    err.response !== null &&
     typeof err.response === "object" &&
-    "data" in err.response
+    "data" in err.response &&
+    err.response.data !== null &&
+    typeof err.response.data === "object" &&
+    "detail" in err.response.data
   ) {
-    const data = (err.response as { data: unknown }).data;
-    if (typeof data === "object" && data !== null && "detail" in data) {
-      return String((data as { detail: unknown }).detail);
-    }
+    return String(err.response.data.detail);
   }
   return "Something went wrong. Please try again.";
 }

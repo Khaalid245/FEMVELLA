@@ -2,12 +2,14 @@ import { useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import Layout from "@/components/Layout";
 import { useCartStore } from "@/store/cartStore";
+import { useCurrencyStore } from "@/store/currencyStore";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
 export default function CartPage() {
   const navigate = useNavigate();
   const { items, removeItem, updateQuantity, total, clearCart } = useCartStore();
+  const symbol = useCurrencyStore((s) => s.getSymbol());
 
   // ── Empty State ──────────────────────────────────────────────
   if (items.length === 0) {
@@ -195,7 +197,7 @@ export default function CartPage() {
                       color: "#C4985A",
                       marginBottom: "16px",
                     }}>
-                      ${Number(item.price).toFixed(2)}
+                      {symbol}{Number(item.price).toFixed(2)}
                     </p>
 
                     {/* Quantity */}
@@ -351,7 +353,7 @@ export default function CartPage() {
                   Subtotal
                 </span>
                 <span style={{ fontFamily: "'Inter', sans-serif", fontSize: "13px", color: "#2C2420", fontWeight: 500 }}>
-                  ${total().toFixed(2)}
+                  {symbol}{total().toFixed(2)}
                 </span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -380,7 +382,7 @@ export default function CartPage() {
                   color: "#2C2420",
                   fontWeight: 500,
                 }}>
-                  ${total().toFixed(2)}
+                  {symbol}{total().toFixed(2)}
                 </span>
               </div>
             </div>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import api from "@/api/client";
 import type { Order } from "@/api/orders";
+import axios from "axios";
 
 export type PollingStatus = "polling" | "paid" | "failed" | "timeout";
 
@@ -54,15 +55,15 @@ export function useOrderPolling(orderId: number | null): {
         if (data.status === "paid") { setStatus("paid"); return; }
         if (data.status === "failed") { setStatus("failed"); return; }
       } catch (err: unknown) {
-        const status = (err as any)?.response?.status;
+        const httpStatus = axios.isAxiosError(err) ? err.response?.status : undefined;
 
-        if (status === 404) {
+        if (httpStatus === 404) {
           // Order does not exist — stop immediately, no point retrying
           setStatus("failed");
           return;
         }
 
-        if (status === 401 || status === 403) {
+        if (httpStatus === 401 || httpStatus === 403) {
           // Auth error — the axios interceptor handles token refresh / logout.
           // Stop polling; the interceptor will redirect if needed.
           setStatus("failed");

@@ -30,6 +30,7 @@ export default function CheckoutPage() {
   // Navigate only on terminal states — timeout stays on this page
   useEffect(() => {
     if (pollStatus === "paid") {
+      sessionStorage.removeItem("checkout_idempotency_key");
       clearCart();
       navigate(`/order-success/${order!.id}`, { replace: true });
     } else if (pollStatus === "failed") {

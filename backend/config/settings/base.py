@@ -97,7 +97,7 @@ DATABASES = {
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": env("REDIS_URL", default="redis://redis:6379/0"),
+        "LOCATION": env("REDIS_URL"),  # required — no default
         "OPTIONS": {"CLIENT_CLASS": "django_redis.client.DefaultClient"},
     }
 }
@@ -130,7 +130,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",),
     "DEFAULT_PAGINATION_CLASS": "core.pagination.StandardResultsPagination",
-    "PAGE_SIZE": 20,
+    "PAGE_SIZE": env.int("API_PAGE_SIZE", default=20),
     # Rate limiting — applied globally, overridable per view
     "DEFAULT_THROTTLE_CLASSES": [
         "rest_framework.throttling.AnonRateThrottle",
@@ -153,8 +153,8 @@ CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 # Development override — never redirect HTTP in local dev
 SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=False)
 
-CELERY_BROKER_URL = env("REDIS_URL", default="redis://redis:6379/0")
-CELERY_RESULT_BACKEND = env("REDIS_URL", default="redis://redis:6379/0")
+CELERY_BROKER_URL = env("REDIS_URL")          # required — no default
+CELERY_RESULT_BACKEND = env("REDIS_URL")      # required — no default
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_EXPIRES = 3600  # 1 hour — prevent Redis memory bloat
@@ -167,7 +167,7 @@ CELERY_TASK_IGNORE_RESULT = False
 SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=True)
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Strict'
-SESSION_COOKIE_AGE = 3600  # 1 hour
+SESSION_COOKIE_AGE = env.int("SESSION_COOKIE_AGE", default=3600)
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_SAVE_EVERY_REQUEST = True
 
@@ -266,14 +266,14 @@ LOGGING = {
 # Email Configuration
 # ---------------------------------------------------------------------------
 EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend")
-EMAIL_HOST = env("EMAIL_HOST", default="smtp.gmail.com")
+EMAIL_HOST = env("EMAIL_HOST")          # required — no default
 EMAIL_PORT = env.int("EMAIL_PORT", default=587)
 EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
 EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
-DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@femvelle.com")
-ADMIN_NOTIFICATION_EMAILS = env.list("ADMIN_NOTIFICATION_EMAILS", default=["admin@femvelle.com"])
-FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:5173")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")  # required — no default
+ADMIN_NOTIFICATION_EMAILS = env.list("ADMIN_NOTIFICATION_EMAILS", default=[])  # safe empty default
+FRONTEND_URL = env("FRONTEND_URL")  # required — no default
 
 # ---------------------------------------------------------------------------
 # Search Configuration
@@ -302,6 +302,6 @@ SEARCH_RECENTLY_VIEWED_LIMIT = 6
 # ---------------------------------------------------------------------------
 # Stripe
 # ---------------------------------------------------------------------------
-STRIPE_SECRET_KEY = env("STRIPE_SECRET_KEY", default="")
-STRIPE_WEBHOOK_SECRET = env("STRIPE_WEBHOOK_SECRET", default="")
+STRIPE_SECRET_KEY = env("STRIPE_SECRET_KEY")         # required — no default
+STRIPE_WEBHOOK_SECRET = env("STRIPE_WEBHOOK_SECRET") # required — no default
 STRIPE_CURRENCY = env("STRIPE_CURRENCY", default="usd")
