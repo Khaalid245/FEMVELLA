@@ -53,8 +53,23 @@ export function useOrderPolling(orderId: number | null): {
 
         if (data.status === "paid") { setStatus("paid"); return; }
         if (data.status === "failed") { setStatus("failed"); return; }
-      } catch {
-        // Network error — fall through and retry with backoff
+      } catch (err: unknown) {
+        const status = (err as any)?.response?.status;
+
+        if (status === 404) {
+          // Order does not exist — stop immediately, no point retrying
+          setStatus("failed");
+          return;
+        }
+
+        if (status === 401 || status === 403) {
+          // Auth error — the axios interceptor handles token refresh / logout.
+          // Stop polling; the interceptor will redirect if needed.
+          setStatus("failed");
+          return;
+        }
+
+        // Network error or 5xx — fall through and retry with backoff
       }
 
       timerRef.current = setTimeout(poll, intervalRef.current);

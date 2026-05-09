@@ -39,4 +39,4 @@ export const getFormattedWhatsAppNumber = (): string => {
   return `+${WHATSAPP_NUMBER}`;
 };
 
-export { WHATSAPP_NUMBER, DEFAULT_MESSAGE };
+export { DEFAULT_MESSAGE };

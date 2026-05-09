@@ -3,7 +3,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from core.permissions import IsAdminOrReadOnly
 from .filters import ProductFilter
 from .models import Category, Product
-from .serializers import CategorySerializer, ProductSerializer
+from .serializers import CategorySerializer, ProductListSerializer, ProductSerializer
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
@@ -14,13 +14,17 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
 
 class ProductViewSet(viewsets.ModelViewSet):
-    serializer_class = ProductSerializer
     permission_classes = (IsAdminOrReadOnly,)
     filter_backends = (DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter)
     filterset_class = ProductFilter
     search_fields = ("name", "description")
     ordering_fields = ("price", "created_at")
     ordering = ("-created_at",)
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return ProductListSerializer
+        return ProductSerializer
 
     def get_object(self):
         """Support lookup by both pk (integer) and slug (string)."""

@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import api from "./client";
 
 interface ColorOption {
@@ -58,18 +58,6 @@ export const useProducts = (params?: Record<string, string>) =>
       api.get<ProductsResponse>("/products/", { params }).then((r) => r.data),
     staleTime: 1000 * 60 * 5,
   });
-
-export const useProduct = (slug: string) => {
-  const isValidSlug = !!slug && slug !== 'undefined' && slug !== 'null';
-  return useQuery({
-    queryKey: ["product", slug],
-    queryFn: () => api.get<Product>(`/products/${slug}/`).then((r) => r.data),
-    enabled: isValidSlug,
-    retry: false,
-    staleTime: 1000 * 60 * 10,
-    gcTime: 1000 * 60 * 30,
-  });
-};
 
 // Public product detail — used by the product detail page
 export const useProductDetail = (slug: string) => {

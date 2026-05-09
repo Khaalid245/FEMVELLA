@@ -4,9 +4,18 @@ export function initSentry() {
   const dsn = import.meta.env.VITE_SENTRY_DSN;
   if (!dsn || import.meta.env.DEV) return;
 
+  const environment = import.meta.env.VITE_ENVIRONMENT;
+  if (!environment) {
+    // Refuse to initialise Sentry without an explicit environment tag.
+    // This prevents staging/preview deployments from polluting the
+    // production dashboard with mistagged events.
+    console.warn("[Femvelle] Sentry not initialised: VITE_ENVIRONMENT is not set.");
+    return;
+  }
+
   Sentry.init({
     dsn,
-    environment: import.meta.env.VITE_ENVIRONMENT ?? "production",
+    environment,
     release: import.meta.env.VITE_RELEASE_VERSION,
     integrations: [
       Sentry.browserTracingIntegration(),

@@ -43,7 +43,10 @@ export const useCurrencyStore = create<CurrencyState>()(
 
       getSymbol: () => {
         const { active, currencies } = get();
-        return currencies.find((c) => c.code === active)?.symbol ?? "$";
+        // Prefer the symbol from the loaded currencies list.
+        // Fall back to the ISO code itself (e.g. "USD") so the UI always
+        // shows something meaningful rather than a hardcoded "$".
+        return currencies.find((c) => c.code === active)?.symbol ?? active;
       },
     }),
     { name: "femvelle-currency", partialize: (s) => ({ active: s.active }) }
