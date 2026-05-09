@@ -6,7 +6,7 @@ import Button from "./Button";
 
 export default function ProductCard({ product }: { product: Product }) {
   const addItem = useCartStore((s) => s.addItem);
-  const primaryImage = product.images.find((i) => i.is_primary) ?? product.images[0];
+  const primaryImage = (product.images ?? []).find((i) => i.is_primary) ?? (product.images ?? [])[0];
   const productPath = product.slug && !/^\d+$/.test(product.slug)
     ? `/products/${product.slug}`
     : `/products/${product.id}`;

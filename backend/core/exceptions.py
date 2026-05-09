@@ -7,15 +7,29 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class AuthRateThrottle(AnonRateThrottle):
+class _SafeThrottleMixin:
+    """Silently disables itself when no rate is configured for its scope."""
+    def get_rate(self):
+        try:
+            return super().get_rate()
+        except Exception:
+            return None
+
+    def allow_request(self, request, view):
+        if self.rate is None:
+            return True
+        return super().allow_request(request, view)
+
+
+class AuthRateThrottle(_SafeThrottleMixin, AnonRateThrottle):
     scope = "auth"
 
 
-class PaymentRateThrottle(UserRateThrottle):
+class PaymentRateThrottle(_SafeThrottleMixin, UserRateThrottle):
     scope = "payment"
 
 
-class SearchRateThrottle(AnonRateThrottle):
+class SearchRateThrottle(_SafeThrottleMixin, AnonRateThrottle):
     scope = "search"
 
 

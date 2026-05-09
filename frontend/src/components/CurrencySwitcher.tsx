@@ -6,9 +6,11 @@ export default function CurrencySwitcher() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
+  // Load once — guard prevents duplicate calls when rendered in both
+  // desktop and mobile navbar slots simultaneously.
   useEffect(() => {
-    loadCurrencies();
-  }, [loadCurrencies]);
+    if (currencies.length === 0) loadCurrencies();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {

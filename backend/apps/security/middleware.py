@@ -103,8 +103,9 @@ class SecurityMiddleware(MiddlewareMixin):
                 limit_config = config
                 break
 
-        # Create cache key
-        cache_key = f"rate_limit:{client_ip}:{request.path.split('/')[1:3]}"
+        # Create cache key — join path segments to avoid list-in-string formatting
+        path_key = ".".join(request.path.split("/")[1:3])
+        cache_key = f"rate_limit:{client_ip}:{path_key}"
         
         # Get current request count
         current_requests = cache.get(cache_key, 0)

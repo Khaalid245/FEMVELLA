@@ -63,17 +63,43 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 class ProductListSerializer(CurrencyPriceMixin, serializers.ModelSerializer):
     """Lightweight serializer for product list views — minimal fields, no variants."""
     primary_image = serializers.SerializerMethodField()
+    images = serializers.SerializerMethodField()
     category_name = serializers.CharField(source="category.name", read_only=True)
+    category = serializers.SerializerMethodField()
     discount_percent = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = (
-            "id", "name", "slug", "category_name",
+            "id", "name", "slug", "category", "category_name",
             "price", "sale_price", "discount_percent",
             "total_stock", "is_featured", "is_new", "is_bestseller",
-            "primary_image", "created_at",
+            "primary_image", "images", "created_at",
         )
+
+    def get_category(self, obj):
+        if not obj.category:
+            return None
+        return {"id": obj.category.id, "name": obj.category.name, "slug": obj.category.slug}
+
+    def get_images(self, obj):
+        """Return all images with absolute URLs — needed by ProductCard components."""
+        request = self.context.get("request")
+        result = []
+        for image in obj.images.all():
+            url = (
+                request.build_absolute_uri(image.image.url)
+                if request and image.image
+                else (image.image.url if image.image else None)
+            )
+            result.append({
+                "id": image.id,
+                "image": url,
+                "alt_text": image.alt_text,
+                "is_primary": image.is_primary,
+                "sort_order": image.sort_order,
+            })
+        return result
 
     def get_primary_image(self, obj):
         # Iterate the prefetched queryset once — avoids a second DB call

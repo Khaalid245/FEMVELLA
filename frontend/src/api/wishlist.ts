@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from './client';
+import { useAuthStore } from '@/store/authStore';
 
 export interface WishlistItem {
   id: number;
@@ -24,28 +25,33 @@ export interface Wishlist {
   updated_at: string;
 }
 
-// Get user's wishlist
+// Get user's wishlist — only fires when the user is authenticated
 export const useWishlist = () => {
+  const accessToken = useAuthStore((s) => s.accessToken);
   return useQuery({
     queryKey: ['wishlist'],
     queryFn: async () => {
       const { data } = await api.get('/wishlist/');
       return data.wishlist as Wishlist;
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    enabled: !!accessToken,   // ← never runs when logged out
+    staleTime: 5 * 60 * 1000,
+    retry: false,             // ← don't retry auth errors
   });
 };
 
 // Check if product is in wishlist
 export const useWishlistStatus = (productId: number) => {
+  const accessToken = useAuthStore((s) => s.accessToken);
   return useQuery({
     queryKey: ['wishlist-status', productId],
     queryFn: async () => {
       const { data } = await api.get(`/wishlist/check/${productId}/`);
       return data;
     },
-    enabled: !!productId,
-    staleTime: 2 * 60 * 1000, // 2 minutes
+    enabled: !!accessToken && !!productId,  // ← never runs when logged out
+    staleTime: 2 * 60 * 1000,
+    retry: false,
   });
 };
 

@@ -1,7 +1,7 @@
 import axios from "axios";
 import { useAuthStore } from "@/store/authStore";
 
-const rawApiUrl = import.meta.env.VITE_API_URL;
+const rawApiUrl = (import.meta.env.VITE_API_URL ?? "").trim();
 if (!rawApiUrl) {
   throw new Error(
     "[Femvelle] Missing VITE_API_URL environment variable. " +
@@ -29,10 +29,15 @@ api.interceptors.response.use(
     const original = error.config;
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
+      const refresh = useAuthStore.getState().refreshToken;
+      // No refresh token — logout immediately, do not attempt refresh
+      if (!refresh) {
+        useAuthStore.getState().logout();
+        return Promise.reject(error);
+      }
       try {
-        const refresh = useAuthStore.getState().refreshToken;
         const { data } = await axios.post(`${API_BASE_URL}/auth/token/refresh/`, { refresh });
-        useAuthStore.getState().setTokens(data.access, data.refresh);
+        useAuthStore.getState().setTokens(data.access, data.refresh ?? refresh);
         original.headers.Authorization = `Bearer ${data.access}`;
         return api(original);
       } catch {

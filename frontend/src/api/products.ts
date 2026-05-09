@@ -26,12 +26,19 @@ export interface Product {
   is_new: boolean;
   is_bestseller: boolean;
   is_customizable: boolean;
-  images: { id: number; image: string; alt_text?: string; is_primary: boolean }[];
+  images: { id: number; image: string; alt_text?: string; is_primary: boolean; sort_order?: number }[];
+  primary_image: string | null;
   colors: { id: number; name: string; hex_code: string }[];
   sizes: { id: number; size: string; in_stock: boolean }[];
   variants: ProductVariant[];
-  category: { id: number; name: string; slug: string };
+  category: { id: number; name: string; slug: string } | null;
+  category_name?: string;
   created_at: string;
+  // Currency fields added by CurrencyPriceMixin
+  currency?: string;
+  currency_symbol?: string;
+  display_price?: string;
+  display_sale_price?: string;
 }
 
 export interface ProductsResponse {

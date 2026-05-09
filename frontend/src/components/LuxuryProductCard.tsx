@@ -14,7 +14,7 @@ function LuxuryProductCard({ product }: Props) {
   const [addedFeedback, setAddedFeedback] = useState(false);
 
   const primaryImage =
-    product.images.find((i) => i.is_primary) ?? product.images[0];
+    (product.images ?? []).find((i) => i.is_primary) ?? (product.images ?? [])[0];
 
   const isOnSale = !!product.sale_price;
   const isOutOfStock = product.total_stock === 0;
